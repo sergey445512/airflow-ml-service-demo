@@ -222,6 +222,8 @@ services:
     depends_on:
       inference:
         condition: service_healthy
+      redisinsight-init:
+        condition: service_completed_successfully
     restart: unless-stopped
 
   database-ui:
