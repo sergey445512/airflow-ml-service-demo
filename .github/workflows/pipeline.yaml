@@ -58,7 +58,7 @@ jobs:
           docker compose -p ml-ci exec -T inference python scripts/smoke_release.py --revision "$GITHUB_SHA"
       - name: Verify Prometheus and Grafana
         run: |
-          docker compose -p ml-ci exec -T inference python scripts/verify_monitoring.py
+          docker compose -p ml-ci exec -T airflow python scripts/verify_monitoring.py
           docker compose -p ml-ci exec -T inference python scripts/verify_traffic.py
       - name: Verify Qdrant, Redis and their user interfaces
         run: docker compose -p ml-ci exec -T inference python scripts/verify_stores.py
