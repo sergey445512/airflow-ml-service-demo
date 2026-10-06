@@ -11,6 +11,15 @@ from pathlib import Path
 import requests
 
 BASE = "http://localhost:8080"
+for attempt in range(90):
+    try:
+        if requests.get(BASE + "/api/v2/version", timeout=3).status_code < 500:
+            break
+    except requests.RequestException:
+        pass
+    time.sleep(2)
+else:
+    raise TimeoutError("Airflow did not start within 180 seconds")
 passwords = json.loads((Path(os.environ.get("AIRFLOW_HOME", "/opt/airflow")) / "simple_auth_manager_passwords.json.generated").read_text())
 session = requests.Session()
 token = session.post(BASE + "/auth/token", json={"username": "admin", "password": passwords["admin"]}, timeout=20)
