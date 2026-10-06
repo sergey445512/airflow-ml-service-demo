@@ -1,6 +1,6 @@
 name: ml-airflow-demo
 x-app: &app
-  image: ${DEMO_IMAGE:-ml-airflow-demo:local}
+  image: ${PLATFORM_IMAGE:-ml-airflow-demo:platform}
   volumes:
     - .:/opt/demo:ro
   environment: &env
@@ -46,7 +46,7 @@ services:
         condition: service_healthy
 
   redisinsight-init:
-    image: ${DEMO_IMAGE:-ml-airflow-demo:local}
+    image: ${PLATFORM_IMAGE:-ml-airflow-demo:platform}
     entrypoint: []
     command: [python, /opt/demo/scripts/init_redisinsight.py]
     volumes:
@@ -62,7 +62,7 @@ services:
       - qdrant-data:/qdrant/storage
 
   qdrant-init:
-    image: ${DEMO_IMAGE:-ml-airflow-demo:local}
+    image: ${PLATFORM_IMAGE:-ml-airflow-demo:platform}
     entrypoint: []
     command: [python, /opt/demo/scripts/init_qdrant.py]
     environment: *env
@@ -127,7 +127,7 @@ services:
       retries: 30
 
   s3-init:
-    image: ${DEMO_IMAGE:-ml-airflow-demo:local}
+    image: ${PLATFORM_IMAGE:-ml-airflow-demo:platform}
     entrypoint: []
     command: [python, /opt/demo/scripts/init_s3.py]
     environment: *s3-env
@@ -197,6 +197,10 @@ services:
 
   inference:
     <<: *app
+    image: ${SERVICE_IMAGE:-ml-airflow-demo:service}
+    build:
+      context: .
+      dockerfile: Dockerfile.service
     depends_on:
       postgres:
         condition: service_healthy
@@ -214,7 +218,7 @@ services:
       retries: 20
 
   traffic:
-    image: ${DEMO_IMAGE:-ml-airflow-demo:local}
+    image: ${SERVICE_IMAGE:-ml-airflow-demo:service}
     entrypoint: []
     command: [python, -u, /opt/demo/scripts/demo_traffic.py, --forever, --scenario, cycle, --switch-every, '180', --interval, '4']
     volumes:

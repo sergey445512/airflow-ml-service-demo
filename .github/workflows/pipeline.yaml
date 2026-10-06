@@ -25,19 +25,29 @@ jobs:
     outputs:
       image: ${{ steps.publish.outputs.image }}
     env:
-      DEMO_IMAGE: ml-airflow-demo:ci
+      PLATFORM_IMAGE: ghcr.io/sergey445512/airflow-ml-service-demo@sha256:b5a51c53a8df8c8f329403f1ccfdad84c675335fed574d819681fabdf3bda630
+      SERVICE_IMAGE: ml-airflow-demo:ci-service
       COMPOSE_PROJECT_NAME: ml-ci
     steps:
       - uses: actions/checkout@v6
         with:
           persist-credentials: false
-      - name: Build immutable image
-        run: docker build --build-arg SOURCE_REVISION="$GITHUB_SHA" --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" -t "$DEMO_IMAGE" .
+      - name: Authenticate platform image download
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Build only the service image
+        run: |
+          docker pull "$PLATFORM_IMAGE"
+          docker build -f Dockerfile.service --build-arg SOURCE_REVISION="$GITHUB_SHA" --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" -t "$SERVICE_IMAGE" .
       - name: Validate configuration and dependencies
         run: |
           docker compose -f compose.yaml -f compose.release.yaml config --quiet
-          docker run --rm --entrypoint python "$DEMO_IMAGE" -m pip check
-          docker run --rm --entrypoint python "$DEMO_IMAGE" scripts/test_metrics.py
+          docker run --rm --entrypoint python "$PLATFORM_IMAGE" -m pip check
+          docker run --rm --entrypoint python "$SERVICE_IMAGE" -m pip check
+          docker run --rm --entrypoint python "$SERVICE_IMAGE" scripts/test_metrics.py
       - name: Start isolated stack
         run: docker compose -p ml-ci -f compose.yaml -f compose.release.yaml up -d --no-build --wait --wait-timeout 240
       - name: Verify DAGs, retry, recovery and real inference
@@ -52,7 +62,7 @@ jobs:
           docker compose -p ml-ci exec -T inference python scripts/verify_traffic.py
       - name: Verify Qdrant, Redis and their user interfaces
         run: docker compose -p ml-ci exec -T inference python scripts/verify_stores.py
-      - name: Publish tested image
+      - name: Publish tested service image
         id: publish
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
         env:
@@ -60,7 +70,7 @@ jobs:
         run: |
           registry="ghcr.io/${GITHUB_REPOSITORY,,}"
           echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
-          docker tag "$DEMO_IMAGE" "$registry:$GITHUB_SHA"
+          docker tag "$SERVICE_IMAGE" "$registry:$GITHUB_SHA"
           docker push "$registry:$GITHUB_SHA"
           digest=$(docker image inspect "$registry:$GITHUB_SHA" --format '{{index .RepoDigests 0}}')
           echo "image=$digest" >> "$GITHUB_OUTPUT"
@@ -94,7 +104,7 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Deploy and check online prediction
+      - name: Deploy service without restarting platform
         env:
           RELEASE_IMAGE: ${{ needs.ci.outputs.image }}
         run: ./scripts/deploy.ps1 -Image $env:RELEASE_IMAGE -Revision $env:GITHUB_SHA

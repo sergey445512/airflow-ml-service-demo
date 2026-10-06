@@ -6,6 +6,7 @@ services:
   mlflow:
     volumes: !reset []
   inference:
+    build: !reset null
     volumes: !reset []
   traffic:
     volumes: !reset []
