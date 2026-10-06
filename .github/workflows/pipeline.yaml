@@ -49,6 +49,7 @@ jobs:
           docker run --rm --entrypoint python "$PLATFORM_IMAGE" -m pip check
           docker run --rm --entrypoint python "$SERVICE_IMAGE" -m pip check
           docker run --rm --entrypoint python "$SERVICE_IMAGE" scripts/test_metrics.py
+          docker run --rm --entrypoint python "$SERVICE_IMAGE" scripts/test_model_registry.py
       - name: Start isolated stack
         run: docker compose -p ml-ci -f compose.yaml -f compose.release.yaml up -d --no-build --wait --wait-timeout 240
       - name: Verify DAGs, retry, recovery and real inference

@@ -8,6 +8,12 @@ MODEL_NAME = "churn-prediction"
 PRODUCTION_ALIAS = "production"
 
 
+def _missing_alias(exc):
+    return (exc.error_code == "RESOURCE_DOES_NOT_EXIST" or
+            (exc.error_code == "INVALID_PARAMETER_VALUE" and
+             f"Registered model alias {PRODUCTION_ALIAS} not found" in str(exc)))
+
+
 def register_candidate(model_info):
     """Add a trained model as a version; only bootstrap an empty registry."""
     client = MlflowClient()
@@ -21,7 +27,7 @@ def register_candidate(model_info):
     try:
         client.get_model_version_by_alias(MODEL_NAME, PRODUCTION_ALIAS)
     except MlflowException as exc:
-        if exc.error_code != "RESOURCE_DOES_NOT_EXIST":
+        if not _missing_alias(exc):
             raise
         client.set_registered_model_alias(MODEL_NAME, PRODUCTION_ALIAS, version.version)
     return version
@@ -32,6 +38,6 @@ def production_version():
     try:
         return MlflowClient().get_model_version_by_alias(MODEL_NAME, PRODUCTION_ALIAS)
     except MlflowException as exc:
-        if exc.error_code != "RESOURCE_DOES_NOT_EXIST":
+        if not _missing_alias(exc):
             raise
         return None
