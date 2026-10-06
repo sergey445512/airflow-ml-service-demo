@@ -34,7 +34,7 @@ Runner: `D:\projects\_tools\actions-runner-ml-demo`. Его рабочая па�
 
 ```powershell
 cd D:\projects\airflow_ui_demo
-.\scripts\start-runner.ps1
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-runner.ps1
 ```
 
 Это фоновый процесс текущего пользователя. Компьютер, Docker Desktop и runner должны работать для этапа CD. CI может завершиться на GitHub, пока компьютер выключен; CD тогда останется в очереди.
