@@ -132,3 +132,42 @@ ORDER BY p.id DESC LIMIT 20;
 - [MLflow: backend store](https://mlflow.org/docs/latest/self-hosting/architecture/backend-store/)
 - [MLflow: S3 artifact store](https://mlflow.org/docs/latest/self-hosting/architecture/artifact-store/)
 - [RustFS: запуск в Docker](https://docs.rustfs.com/en/installation/container/docker)
+# Мониторинг модели: Prometheus + Grafana
+
+- Grafana: http://localhost:3000/d/ml-model-overview — `admin` / `demo_grafana`.
+- Prometheus: http://localhost:9090 — страница Targets показывает сбор метрик с inference.
+- Исходные метрики: http://localhost:8000/metrics.
+
+Дашборд создаётся автоматически: запросы/сек по HTTP-статусу, p50/p95 задержки,
+ошибки 4xx/5xx, распределение вероятностей оттока, доля класса 1, средние входные
+признаки, опубликованная версия модели, время публикации и offline ROC AUC.
+ROC AUC берётся из PostgreSQL после обучения; это не оценка качества на живом трафике.
+Для online quality нужны фактические ответы пользователей. Сдвиг входных признаков
+или прогнозов сам по себе не доказывает ухудшение качества.
+
+Демонстрация (из каталога репозитория, при запущенном стеке):
+
+```powershell
+docker compose exec -T inference python scripts/demo_traffic.py --seconds 120 --scenario normal
+docker compose exec -T inference python scripts/demo_traffic.py --seconds 120 --scenario high-risk
+```
+
+Откройте Grafana, выберите последние 15 минут. Первый запуск создаёт обычные
+синтетические запросы, второй — клиентов с небольшим стажем и большим числом
+обращений. Каждый двадцатый запрос намеренно невалиден (422). Успешные прогнозы
+сохраняются в `app.predictions`. Генератор конечный: после указанного времени
+завершается. Также можно отправлять запросы вручную через http://localhost:8000.
+
+Prometheus опрашивает API каждые 5 секунд, история хранится 15 дней в отдельном
+volume. Grafana хранит настройки в своём volume; конфигурация datasource и dashboard
+версионируется в `monitoring/` и доставляется через CI/CD. Счётчики API сбрасываются
+после перезапуска процесса; запросы `rate` учитывают сброс. Старые строки из БД не
+превращаются задним числом в временные ряды. Без трафика некоторые панели пустые.
+Метрики запросов агрегированы по всем версиям; версия модели показана отдельно.
+Инструментация рассчитана на текущий один процесс uvicorn.
+
+Проверка: `docker compose exec -T inference python scripts/verify_monitoring.py`.
+CI и CD запускают её автоматически: HTTP-метрики, модель/AUC, scrape Prometheus,
+datasource Grafana и все запросы панелей. Проверка создаёт один успешный прогноз
+и один запрос с ошибкой валидации. Автоматическая рассылка оповещений пока не настроена.
+Демонстрационные учётные данные подходят только для локального стенда.

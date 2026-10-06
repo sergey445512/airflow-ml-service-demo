@@ -1,19 +1,42 @@
 import json
 import threading
+import time
 from pathlib import Path
 
 import mlflow.sklearn
 import pandas as pd
 from fastapi import FastAPI, HTTPException
-from fastapi.responses import HTMLResponse
+from fastapi.responses import HTMLResponse, Response
+from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
 from pydantic import BaseModel, Field
 
 from src.pipeline import FEATURES, connect, initialize
 from src.revision import code_revision
+from service import metrics
 
 app = FastAPI(title="Churn demo — online inference", version="1.0")
 _lock = threading.Lock()
 _cache = {}
+
+
+@app.middleware("http")
+async def measure_prediction(request, call_next):
+    if request.url.path != "/predict" or request.method != "POST":
+        return await call_next(request)
+    started = time.perf_counter()
+    status = "500"
+    try:
+        response = await call_next(request)
+        status = str(response.status_code)
+        return response
+    finally:
+        metrics.REQUESTS.labels(status).inc()
+        metrics.LATENCY.observe(time.perf_counter() - started)
+
+
+@app.get("/metrics", include_in_schema=False)
+def prometheus_metrics():
+    return Response(generate_latest(), headers={"Content-Type": CONTENT_TYPE_LATEST})
 
 
 class Customer(BaseModel):
@@ -59,13 +82,23 @@ def predict(customer: Customer):
     info = active_model()
     with _lock:
         if _cache.get("run_id") != info["mlflow_run_id"]:
-            loaded = mlflow.sklearn.load_model(info["model_uri"])
+            try:
+                with metrics.LOAD_TIME.time():
+                    loaded = mlflow.sklearn.load_model(info["model_uri"])
+            except Exception:
+                metrics.LOADS.labels("error").inc()
+                raise
+            metrics.LOADS.labels("success").inc()
             _cache.update(run_id=info["mlflow_run_id"], model=loaded)
         model = _cache["model"]
     features = customer.model_dump()
     probability = float(model.predict_proba(pd.DataFrame([features], columns=FEATURES))[0, 1])
     with connect() as conn, conn.cursor() as cur:
         cur.execute("INSERT INTO app.predictions(mlflow_run_id,features,probability) VALUES(%s,%s::jsonb,%s)", (info["mlflow_run_id"], json.dumps(features), probability))
+    metrics.PROBABILITY.observe(probability)
+    metrics.PREDICTIONS.labels(str(int(probability >= 0.5))).inc()
+    for feature, histogram in metrics.FEATURES.items():
+        histogram.observe(features[feature])
     return {"churn_probability": round(probability, 4), "prediction": int(probability >= 0.5), **info}
 
 

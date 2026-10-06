@@ -45,10 +45,12 @@ if ($currentId) {
 if (Test-Path -LiteralPath $stateFile) { $previousState = Get-Content -LiteralPath $stateFile -Raw }
 Copy-Item -LiteralPath (Join-Path $sourceRoot 'compose.yaml') -Destination $releaseDir -Force
 Copy-Item -LiteralPath (Join-Path $sourceRoot 'compose.release.yaml') -Destination $releaseDir -Force
+Copy-Item -LiteralPath (Join-Path $sourceRoot 'monitoring') -Destination $releaseDir -Recurse -Force
 $composeArgs = @('compose', '-p', 'ml-airflow-demo', '-f', (Join-Path $releaseDir 'compose.yaml'), '-f', (Join-Path $releaseDir 'compose.release.yaml'))
 try {
     DockerCommand -DockerArgs ($composeArgs + @('up', '-d', '--no-build', '--wait', '--wait-timeout', '240'))
     DockerCommand -DockerArgs ($composeArgs + @('exec', '-T', 'inference', 'python', 'scripts/smoke_release.py', '--revision', $Revision))
+    DockerCommand -DockerArgs ($composeArgs + @('exec', '-T', 'inference', 'python', 'scripts/verify_monitoring.py'))
     $state = @{ image=$Image; revision=$Revision; release_dir=$releaseDir; deployed_at=(Get-Date).ToUniversalTime().ToString('o') }
     [IO.File]::WriteAllText($stateFile, ($state | ConvertTo-Json))
     Write-Output "Deployed $Revision using $Image"
