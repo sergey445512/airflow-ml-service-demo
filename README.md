@@ -58,7 +58,7 @@ MLflow хранит метаданные в PostgreSQL в схеме `public`, �
 3. **PostgreSQL.** В схеме `app` открыть `customers`, `model_runs`, `active_model`, найти идентификатор обучения.
 4. **MLflow.** Открыть `churn-online-demo`, параметры, holdout-метрики, теги `git_commit` и `airflow_run_id`, артефакты/модель.
 5. **Инференс.** Отправить несколько запросов через форму, меняя число обращений в поддержку. Показать `/docs`, затем новые строки `app.predictions`.
-6. **Изменение из GitHub.** Отдельным коммитом поменять `max_depth` с 4 на 8 в `model_config.json`, получить изменения локально и снова запустить DAG. Сравнить два запуска в MLflow; в сервисе показать новый commit и run ID.
+6. **Изменение из GitHub.** Отдельным коммитом поменять `max_depth` с 8 на 12 в `model_config.json`, получить изменения локально и снова запустить DAG. Сравнить два запуска в MLflow; в сервисе показать новый commit и run ID.
 7. **Ошибки и retries.** При необходимости перейти к DAG-ам 01–03: подробный сценарий в [AIRFLOW_GUIDE.md](AIRFLOW_GUIDE.md).
 
 ## GitHub и обновление кода
@@ -96,6 +96,8 @@ ORDER BY p.id DESC LIMIT 20;
 ```
 
 ## Остановка
+
+Для проверки всех четырёх DAG-ов: `docker compose exec airflow python scripts/verify_demo.py`. Команда создаёт настоящие запуски, выполняет retry и Clear, затем проверяет инференс и строки в PostgreSQL. Проверка занимает несколько минут и оставляет историю для показа.
 
 `docker compose stop` — остановка, `docker compose start` — повторный запуск.
 `docker compose down` удаляет контейнеры и сеть, сохраняя volumes; после него использовать `docker compose up -d`. Не добавлять `-v`, если нужна история, модели и данные.

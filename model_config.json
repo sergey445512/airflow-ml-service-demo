@@ -1,5 +1,5 @@
 {
   "n_estimators": 40,
-  "max_depth": 4,
+  "max_depth": 8,
   "random_state": 42
 }
