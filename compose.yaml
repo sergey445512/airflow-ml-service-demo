@@ -1,7 +1,6 @@
 name: ml-airflow-demo
 x-app: &app
   image: ml-airflow-demo:local
-  build: .
   volumes:
     - .:/opt/demo:ro
   environment: &env
@@ -33,12 +32,21 @@ services:
     entrypoint: []
     command: [mlflow, server, --host, 0.0.0.0, --port, '5000', --backend-store-uri, 'postgresql://demo:demo_local@postgres:5432/demo', --artifacts-destination, /mlartifacts, --serve-artifacts, --allowed-hosts, 'mlflow:5000,localhost:5000,127.0.0.1:5000']
     ports: ['127.0.0.1:5000:5000']
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://localhost:5000/health', timeout=5)"]
+      interval: 10s
+      timeout: 7s
+      retries: 30
     volumes:
       - .:/opt/demo:ro
       - mlflow-artifacts:/mlartifacts
 
   airflow:
     <<: *app
+    build: .
+    depends_on:
+      mlflow:
+        condition: service_healthy
     command: standalone
     environment:
       <<: *env
@@ -59,6 +67,11 @@ services:
     entrypoint: []
     command: [uvicorn, service.app:app, --host, 0.0.0.0, --port, '8000']
     ports: ['127.0.0.1:8000:8000']
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=5)"]
+      interval: 10s
+      timeout: 7s
+      retries: 20
 
   database-ui:
     image: adminer:5.4.1
