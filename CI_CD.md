@@ -35,7 +35,7 @@ GHCR использует короткоживущий `GITHUB_TOKEN` задан
 Runner: `D:\projects\_tools\actions-runner-ml-demo`. Его рабочая папка и регистрационные файлы расположены вне репозитория. Запуск после перезагрузки Windows:
 
 ```powershell
-cd D:\projects\airflow_ui_demo
+cd D:\ml-platform-demo
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-runner.ps1
 ```
 
