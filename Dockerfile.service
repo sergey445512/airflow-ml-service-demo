@@ -14,7 +14,8 @@ WORKDIR /opt/demo
 COPY --chown=app:app service/ ./service/
 COPY --chown=app:app src/ ./src/
 COPY --chown=app:app scripts/demo_traffic.py scripts/smoke_release.py \
-    scripts/verify_stores.py scripts/verify_traffic.py scripts/test_metrics.py ./scripts/
+    scripts/verify_stores.py scripts/verify_traffic.py scripts/verify_registry.py \
+    scripts/test_metrics.py ./scripts/
 
 ARG SOURCE_REVISION=local
 ENV DEMO_CODE_REVISION=${SOURCE_REVISION}
