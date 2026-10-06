@@ -12,7 +12,44 @@ x-app: &app
     postgres:
       condition: service_healthy
 
+x-s3-env: &s3-env
+  MLFLOW_S3_ENDPOINT_URL: http://s3:9000
+  AWS_ACCESS_KEY_ID: demo_s3
+  AWS_SECRET_ACCESS_KEY: demo_s3_password
+  AWS_DEFAULT_REGION: us-east-1
+  S3_BUCKET: mlflow-artifacts
+
 services:
+  s3:
+    image: rustfs/rustfs:1.0.1
+    environment:
+      RUSTFS_ACCESS_KEY: demo_s3
+      RUSTFS_SECRET_KEY: demo_s3_password
+      RUSTFS_VOLUMES: /data
+      RUSTFS_ADDRESS: 0.0.0.0:9000
+      RUSTFS_CONSOLE_ADDRESS: 0.0.0.0:9001
+      RUSTFS_CONSOLE_ENABLE: 'true'
+    ports: ['127.0.0.1:9000:9000', '127.0.0.1:9001:9001']
+    volumes:
+      - s3-data:/data
+    healthcheck:
+      test: [CMD, curl, -f, http://localhost:9000/health]
+      interval: 5s
+      timeout: 5s
+      retries: 30
+
+  s3-init:
+    image: ml-airflow-demo:local
+    entrypoint: []
+    command: [python, /opt/demo/scripts/init_s3.py]
+    environment: *s3-env
+    volumes:
+      - .:/opt/demo:ro
+      - mlflow-artifacts:/legacy-artifacts:ro
+    depends_on:
+      s3:
+        condition: service_healthy
+
   postgres:
     image: postgres:16.10
     environment:
@@ -30,7 +67,14 @@ services:
   mlflow:
     <<: *app
     entrypoint: []
-    command: [mlflow, server, --host, 0.0.0.0, --port, '5000', --workers, '1', --backend-store-uri, 'postgresql://demo:demo_local@postgres:5432/demo', --artifacts-destination, /mlartifacts, --serve-artifacts, --allowed-hosts, 'mlflow:5000,localhost:5000,127.0.0.1:5000']
+    command: [mlflow, server, --host, 0.0.0.0, --port, '5000', --workers, '1', --backend-store-uri, 'postgresql://demo:demo_local@postgres:5432/demo', --artifacts-destination, 's3://mlflow-artifacts', --serve-artifacts, --allowed-hosts, 'mlflow:5000,localhost:5000,127.0.0.1:5000']
+    environment:
+      <<: [*env, *s3-env]
+    depends_on:
+      postgres:
+        condition: service_healthy
+      s3-init:
+        condition: service_completed_successfully
     ports: ['127.0.0.1:5000:5000']
     healthcheck:
       test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://localhost:5000/health', timeout=5)"]
@@ -39,7 +83,6 @@ services:
       retries: 30
     volumes:
       - .:/opt/demo:ro
-      - mlflow-artifacts:/mlartifacts
 
   airflow:
     <<: *app
@@ -84,5 +127,6 @@ services:
 
 volumes:
   postgres-data:
+  s3-data:
   mlflow-artifacts:
   airflow-data:

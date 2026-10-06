@@ -6,8 +6,8 @@ body{font:17px/1.6 system-ui;background:#0c1424;color:#e3ecfb;margin:0}main{max-
 </style><main>
 <small>МИНИ-ПРОЕКТ ДЛЯ ДЕМОНСТРАЦИИ MLOPS</small><h1>Прогноз оттока клиента</h1>
 <p>Настоящая небольшая модель, обученная через Airflow. Измените признаки и получите онлайн-предсказание.</p>
-<nav><a href="http://localhost:8080" target="_blank">Airflow ↗</a><a href="http://localhost:5000" target="_blank">MLflow ↗</a><a href="http://localhost:8081" target="_blank">PostgreSQL ↗</a><a href="/docs" target="_blank">API ↗</a></nav>
-<div class="path">Git → Airflow → PostgreSQL → обучение → MLflow → онлайн-инференс</div>
+<nav><a href="http://localhost:8080" target="_blank">Airflow ↗</a><a href="http://localhost:5000" target="_blank">MLflow ↗</a><a href="http://localhost:9001" target="_blank">S3 · файлы моделей ↗</a><a href="http://localhost:8081" target="_blank">PostgreSQL ↗</a><a href="/docs" target="_blank">API ↗</a></nav>
+<div class="path">Git → Airflow → PostgreSQL → обучение → MLflow + S3 → онлайн-инференс</div>
 <div class="grid"><section class="card"><h2>Клиент</h2><form id="form">
 <label>Месяцев с сервисом<input id="tenure" type="number" min="1" max="72" value="6" required></label>
 <label>Расходы в месяц, условные единицы<input id="spend" type="number" min="10" max="200" step="0.01" value="120" required></label>

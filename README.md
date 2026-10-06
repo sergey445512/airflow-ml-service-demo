@@ -19,6 +19,7 @@ docker compose exec airflow cat /opt/airflow/simple_auth_manager_passwords.json.
 | Сервис | http://localhost:8000 | Форма прогноза, вероятность, версия модели и commit |
 | Airflow | http://localhost:8080 | Граф, запуск, статусы и логи |
 | MLflow | http://localhost:5000 | Эксперимент `churn-online-demo`, параметры, метрики, модель |
+| S3 / RustFS | http://localhost:9001 | Bucket `mlflow-artifacts` и настоящие файлы моделей |
 | PostgreSQL / Adminer | http://localhost:8081 | Таблицы клиентов, моделей и предсказаний |
 | API | http://localhost:8000/docs | `POST /predict` прямо из браузера |
 
@@ -35,6 +36,7 @@ flowchart LR
     A --> T
     T --> M[MLflow: параметры, метрики, модель]
     T --> V[(PostgreSQL: активная версия)]
+    M <--> O[(S3 / RustFS: файлы моделей)]
     M --> S[Онлайн-инференс]
     V --> S
     U[Форма / POST predict] --> S
@@ -49,14 +51,30 @@ flowchart LR
 - Последняя задача отправляет реальный HTTP-запрос сервису и проверяет, что он использует именно опубликованный MLflow run ID.
 - Сервис перед запросом проверяет активную версию. Новую модель загружает из MLflow, затем держит в памяти. Каждый прогноз записывается в `app.predictions`.
 
-MLflow хранит метаданные в PostgreSQL в схеме `public`, учебные таблицы находятся в `app`. Файлы моделей хранятся в отдельном Docker volume и передаются через MLflow. Airflow для компактности использует свою локальную базу в volume.
+MLflow хранит метаданные в PostgreSQL в схеме `public`, учебные таблицы находятся в `app`. Файлы моделей хранятся в S3-совместимом RustFS и передаются через MLflow. Сам RustFS сохраняет объекты в Docker volume `ml-airflow-demo_s3-data`. Airflow для компактности использует свою локальную базу в volume.
+
+## Файлы моделей в S3
+
+Открыть http://localhost:9001. Access key / логин: `demo_s3`, Secret key / пароль: `demo_s3_password`. Выбрать bucket **mlflow-artifacts**, затем `1 → models → <model-id> → artifacts`. Здесь лежат `model.pkl`, `MLmodel`, описание зависимостей и пример входных данных. Порт 9000 — S3 API, порт 9001 — веб-консоль.
+
+Маршрут записи: **задача Airflow → MLflow → S3**. Маршрут загрузки: **сервис → MLflow → S3**. Доступ к S3 настроен у MLflow; задачам обучения и сервису отдельные ключи не нужны. Поэтому MLflow продолжает показывать URI вида `mlflow-artifacts:/...`, хотя физически файлы лежат в `s3://mlflow-artifacts/...`.
+
+При запуске `s3-init` создаёт bucket и копирует старые файлы из прежнего volume, проверяя SHA-256. Исходные файлы сохраняются; повторный запуск проверяет уже скопированные объекты. Перезапись несовпадающего объекта запрещена. Существующие model ID и ссылки сохраняются. MLflow стартует только после успешной подготовки хранилища.
+
+Для проверки сохранённых моделей:
+
+```powershell
+docker compose exec mlflow python scripts/verify_s3.py
+```
+
+Проверка сравнивает байты `model.pkl` в S3 с загрузкой через MLflow и выполняет предсказание каждой сохранённой моделью. Старый volume `mlflow-artifacts` — резервная копия до перехода, новые модели туда не записываются. Чтобы скачать текущую модель, можно выбрать `model.pkl` в S3-консоли; для загрузки всего MLflow-пакета использовать `mlflow.artifacts.download_artifacts` с её `models:/<model-id>` URI.
 
 ## Сценарий демонстрации на 20–25 минут
 
 1. **GitHub.** Показать `service/app.py`, `src/pipeline.py`, `dags/churn_service.py`, `model_config.json`.
 2. **Airflow.** Запустить DAG 04, открыть граф и логи, показать зависимости и статусы. В XCom только небольшие результаты и идентификаторы; данные остаются в PostgreSQL.
 3. **PostgreSQL.** В схеме `app` открыть `customers`, `model_runs`, `active_model`, найти идентификатор обучения.
-4. **MLflow.** Открыть `churn-online-demo`, параметры, holdout-метрики, теги `git_commit` и `airflow_run_id`, артефакты/модель.
+4. **MLflow и S3.** Открыть `churn-online-demo`, параметры, holdout-метрики, теги `git_commit` и `airflow_run_id`, вкладку Models. Скопировать model ID и найти соответствующую папку в bucket `mlflow-artifacts` в RustFS. Показать сам файл `model.pkl`.
 5. **Инференс.** Отправить несколько запросов через форму, меняя число обращений в поддержку. Показать `/docs`, затем новые строки `app.predictions`.
 6. **Изменение из GitHub.** Отдельным коммитом поменять `max_depth` с 8 на 12 в `model_config.json`, получить изменения локально и снова запустить DAG. Сравнить два запуска в MLflow; в сервисе показать новый commit и run ID.
 7. **Ошибки и retries.** При необходимости перейти к DAG-ам 01–03: подробный сценарий в [AIRFLOW_GUIDE.md](AIRFLOW_GUIDE.md).
@@ -110,3 +128,5 @@ ORDER BY p.id DESC LIMIT 20;
 - [Airflow: состояния задач](https://airflow.apache.org/docs/apache-airflow/3.3.2/core-concepts/tasks.html)
 - [MLflow: tracking server](https://mlflow.org/docs/latest/self-hosting/architecture/tracking-server/)
 - [MLflow: backend store](https://mlflow.org/docs/latest/self-hosting/architecture/backend-store/)
+- [MLflow: S3 artifact store](https://mlflow.org/docs/latest/self-hosting/architecture/artifact-store/)
+- [RustFS: запуск в Docker](https://docs.rustfs.com/en/installation/container/docker)
