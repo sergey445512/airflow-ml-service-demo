@@ -1,0 +1,97 @@
+name: ML service CI and CD
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ml-demo-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  ci:
+    name: Build and verify complete stack
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    permissions:
+      contents: read
+      packages: write
+    outputs:
+      image: ${{ steps.publish.outputs.image }}
+    env:
+      DEMO_IMAGE: ml-airflow-demo:ci
+      COMPOSE_PROJECT_NAME: ml-ci
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Build immutable image
+        run: docker build --build-arg SOURCE_REVISION="$GITHUB_SHA" --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" -t "$DEMO_IMAGE" .
+      - name: Validate configuration and dependencies
+        run: |
+          docker compose -f compose.yaml -f compose.release.yaml config --quiet
+          docker run --rm --entrypoint python "$DEMO_IMAGE" -m pip check
+      - name: Start isolated stack
+        run: docker compose -p ml-ci -f compose.yaml -f compose.release.yaml up -d --no-build --wait --wait-timeout 240
+      - name: Verify DAGs, retry, recovery and real inference
+        run: docker compose -p ml-ci exec -T airflow python scripts/verify_demo.py
+      - name: Verify S3 models and exact code revision
+        run: |
+          docker compose -p ml-ci exec -T -e MLFLOW_ENABLE_ARTIFACTS_PROGRESS_BAR=false mlflow python scripts/verify_s3.py
+          docker compose -p ml-ci exec -T inference python scripts/smoke_release.py --revision "$GITHUB_SHA"
+      - name: Publish tested image
+        id: publish
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          registry="ghcr.io/${GITHUB_REPOSITORY,,}"
+          echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          docker tag "$DEMO_IMAGE" "$registry:$GITHUB_SHA"
+          docker push "$registry:$GITHUB_SHA"
+          digest=$(docker image inspect "$registry:$GITHUB_SHA" --format '{{index .RepoDigests 0}}')
+          echo "image=$digest" >> "$GITHUB_OUTPUT"
+          echo "Published: $digest" >> "$GITHUB_STEP_SUMMARY"
+      - name: Show diagnostic logs on failure
+        if: failure()
+        run: docker compose -p ml-ci logs --tail 80
+      - name: Remove disposable CI stack
+        if: always()
+        run: docker compose -p ml-ci down --volumes --remove-orphans
+
+  deploy:
+    name: Deploy verified image to local demo
+    needs: ci
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, Windows, X64, ml-demo]
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: read
+    defaults:
+      run:
+        shell: powershell
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Authenticate image download
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $env:GH_TOKEN | docker login ghcr.io -u $env:GITHUB_ACTOR --password-stdin
+          if ($LASTEXITCODE -ne 0) { throw 'Registry login failed' }
+      - name: Deploy and check online prediction
+        env:
+          RELEASE_IMAGE: ${{ needs.ci.outputs.image }}
+        run: ./scripts/deploy.ps1 -Image $env:RELEASE_IMAGE -Revision $env:GITHUB_SHA
+      - name: Deployment summary
+        run: |
+          "Deployed commit: $env:GITHUB_SHA" >> $env:GITHUB_STEP_SUMMARY
+          'Local service: http://localhost:8000' >> $env:GITHUB_STEP_SUMMARY

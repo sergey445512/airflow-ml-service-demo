@@ -1,0 +1,12 @@
+# Code is baked into the verified image. Persistent data volumes are retained.
+services:
+  airflow:
+    volumes: !override
+      - airflow-data:/opt/airflow
+  mlflow:
+    volumes: !reset []
+  inference:
+    volumes: !reset []
+  s3-init:
+    volumes: !override
+      - mlflow-artifacts:/legacy-artifacts:ro

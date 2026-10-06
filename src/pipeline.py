@@ -2,7 +2,6 @@
 import json
 import logging
 import os
-import subprocess
 from pathlib import Path
 
 import numpy as np
@@ -84,8 +83,9 @@ def train(airflow_run_id):
     if len(frame) < 100 or frame.churn.nunique() != 2:
         raise ValueError("Training requires >=100 rows and both target classes")
     config = json.loads((ROOT / "model_config.json").read_text())
-    commit = subprocess.check_output(["git", "-c", f"safe.directory={ROOT}", "rev-parse", "HEAD"], cwd=ROOT, text=True).strip()
-    dirty = bool(subprocess.check_output(["git", "-c", f"safe.directory={ROOT}", "status", "--porcelain"], cwd=ROOT, text=True).strip())
+    from src.revision import code_revision
+    revision = code_revision()
+    commit, dirty = revision["git_commit"], revision["git_dirty"]
     x_train, x_test, y_train, y_test = train_test_split(frame[FEATURES], frame.churn, test_size=0.25, random_state=42, stratify=frame.churn)
     model = RandomForestClassifier(**config, n_jobs=1)
     mlflow.set_experiment(os.environ.get("MLFLOW_EXPERIMENT_NAME", "churn-online-demo"))

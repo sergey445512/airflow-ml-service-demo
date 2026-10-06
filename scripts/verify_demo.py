@@ -37,6 +37,13 @@ def api(method, path, **kwargs):
 errors = api("GET", "/importErrors")
 assert errors["total_entries"] == 0, errors
 ids = ["demo_01_ml_pipeline", "demo_02_auto_retry", "demo_03_manual_recovery", "demo_04_train_and_publish"]
+for _ in range(90):
+    available = {dag["dag_id"] for dag in api("GET", "/dags", params={"limit": 100})["dags"]}
+    if set(ids) <= available:
+        break
+    time.sleep(2)
+else:
+    raise TimeoutError("Demo DAGs were not parsed")
 run_id = "verification_" + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
 for dag in ids:
     api("PATCH", f"/dags/{dag}", json={"is_paused": False})

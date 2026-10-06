@@ -4,3 +4,6 @@
 __pycache__
 *.log
 .env
+exported_model
+validation.json
+**/__pycache__

@@ -9,6 +9,7 @@ from fastapi.responses import HTMLResponse
 from pydantic import BaseModel, Field
 
 from src.pipeline import FEATURES, connect, initialize
+from src.revision import code_revision
 
 app = FastAPI(title="Churn demo — online inference", version="1.0")
 _lock = threading.Lock()
@@ -46,6 +47,11 @@ def health():
 @app.get("/model")
 def model_info():
     return active_model()
+
+
+@app.get("/version")
+def version():
+    return code_revision()
 
 
 @app.post("/predict")

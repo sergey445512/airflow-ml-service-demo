@@ -1,6 +1,6 @@
 name: ml-airflow-demo
 x-app: &app
-  image: ml-airflow-demo:local
+  image: ${DEMO_IMAGE:-ml-airflow-demo:local}
   volumes:
     - .:/opt/demo:ro
   environment: &env
@@ -39,7 +39,7 @@ services:
       retries: 30
 
   s3-init:
-    image: ml-airflow-demo:local
+    image: ${DEMO_IMAGE:-ml-airflow-demo:local}
     entrypoint: []
     command: [python, /opt/demo/scripts/init_s3.py]
     environment: *s3-env
