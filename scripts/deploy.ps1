@@ -36,9 +36,11 @@ if ($currentId) {
     $configJson = & docker @oldArgs config --format json
     if ($LASTEXITCODE -ne 0) { throw 'Cannot capture previous deployment configuration' }
     $previous = $configJson | ConvertFrom-Json
-    foreach ($service in @('airflow', 'mlflow', 'inference', 's3-init')) {
-        $previous.services.$service.image = $container.Image
-        $previous.services.$service.PSObject.Properties.Remove('build')
+    foreach ($service in @('airflow', 'mlflow', 'inference', 's3-init', 'traffic')) {
+        if ($previous.services.PSObject.Properties.Name -contains $service) {
+            $previous.services.$service.image = $container.Image
+            $previous.services.$service.PSObject.Properties.Remove('build')
+        }
     }
     [IO.File]::WriteAllText($previousFile, ($previous | ConvertTo-Json -Depth 40))
 }
@@ -51,6 +53,7 @@ try {
     DockerCommand -DockerArgs ($composeArgs + @('up', '-d', '--no-build', '--wait', '--wait-timeout', '240'))
     DockerCommand -DockerArgs ($composeArgs + @('exec', '-T', 'inference', 'python', 'scripts/smoke_release.py', '--revision', $Revision))
     DockerCommand -DockerArgs ($composeArgs + @('exec', '-T', 'inference', 'python', 'scripts/verify_monitoring.py'))
+    DockerCommand -DockerArgs ($composeArgs + @('exec', '-T', 'inference', 'python', 'scripts/verify_traffic.py'))
     $state = @{ image=$Image; revision=$Revision; release_dir=$releaseDir; deployed_at=(Get-Date).ToUniversalTime().ToString('o') }
     [IO.File]::WriteAllText($stateFile, ($state | ConvertTo-Json))
     Write-Output "Deployed $Revision using $Image"
@@ -58,7 +61,7 @@ try {
     $failure = $_
     if (Test-Path -LiteralPath $previousFile) {
         Write-Warning 'Deployment failed; restoring previous containers. Data volumes are retained.'
-        DockerCommand -DockerArgs @('compose', '-p', 'ml-airflow-demo', '-f', $previousFile, 'up', '-d', '--no-build', '--wait', '--wait-timeout', '240')
+        DockerCommand -DockerArgs @('compose', '-p', 'ml-airflow-demo', '-f', $previousFile, 'up', '-d', '--no-build', '--remove-orphans', '--wait', '--wait-timeout', '240')
         if ($previousState) { [IO.File]::WriteAllText($stateFile, $previousState) }
     }
     throw $failure

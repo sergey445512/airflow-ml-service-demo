@@ -7,6 +7,8 @@ services:
     volumes: !reset []
   inference:
     volumes: !reset []
+  traffic:
+    volumes: !reset []
   s3-init:
     volumes: !override
       - mlflow-artifacts:/legacy-artifacts:ro

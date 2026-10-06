@@ -150,6 +150,17 @@ services:
       timeout: 7s
       retries: 20
 
+  traffic:
+    image: ${DEMO_IMAGE:-ml-airflow-demo:local}
+    entrypoint: []
+    command: [python, -u, /opt/demo/scripts/demo_traffic.py, --forever, --scenario, cycle, --switch-every, '180', --interval, '4']
+    volumes:
+      - .:/opt/demo:ro
+    depends_on:
+      inference:
+        condition: service_healthy
+    restart: unless-stopped
+
   database-ui:
     image: adminer:5.4.1
     environment:
