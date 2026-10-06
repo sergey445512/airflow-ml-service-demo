@@ -105,10 +105,11 @@ def train(airflow_run_id):
 
 
 def activate(result):
+    from service.model_registry import register_candidate
+
     with connect() as conn, conn.cursor() as cur:
         cur.execute("""INSERT INTO app.model_runs (mlflow_run_id,airflow_run_id,git_commit,roc_auc,model_uri)
             VALUES (%(mlflow_run_id)s,%(airflow_run_id)s,%(git_commit)s,%(roc_auc)s,%(model_uri)s)
             ON CONFLICT (mlflow_run_id) DO NOTHING""", result)
-        cur.execute("""INSERT INTO app.active_model(singleton,mlflow_run_id) VALUES(true,%s)
-            ON CONFLICT(singleton) DO UPDATE SET mlflow_run_id=excluded.mlflow_run_id,activated_at=now()""", (result["mlflow_run_id"],))
-    return result
+    version = register_candidate(result)
+    return result | {"model_version": str(version.version)}

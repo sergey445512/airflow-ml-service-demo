@@ -83,7 +83,9 @@ assert retry["try_number"] == 2, retry
 response = requests.post("http://inference:8000/predict", json={"tenure_months": 6, "monthly_spend": 120, "support_tickets": 5}, timeout=120)
 response.raise_for_status()
 prediction = response.json()
-assert prediction["airflow_run_id"] == run_id, prediction
+from mlflow import MlflowClient
+version = MlflowClient().get_model_version_by_alias("churn-prediction", "production")
+assert prediction["mlflow_run_id"] == version.run_id, prediction
 assert 0 <= prediction["churn_probability"] <= 1, prediction
 invalid = requests.post("http://inference:8000/predict", json={"tenure_months": -1, "monthly_spend": 120, "support_tickets": 5}, timeout=20)
 assert invalid.status_code == 422, invalid.text

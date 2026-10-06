@@ -1,5 +1,4 @@
 import json
-import logging
 import threading
 import time
 from pathlib import Path
@@ -17,7 +16,7 @@ from src.pipeline import FEATURES, connect, initialize
 from src.revision import code_revision
 from src.neighbors import CACHE_TTL_SECONDS, COLLECTION, cache_client, cache_key, find_neighbors
 from service import metrics
-from service.model_registry import sync_production_alias
+from service.model_registry import MODEL_NAME, PRODUCTION_ALIAS, production_version
 
 app = FastAPI(title="Churn demo — online inference", version="1.0")
 _lock = threading.Lock()
@@ -57,29 +56,47 @@ class SimilarCustomer(Customer):
 @app.on_event("startup")
 def startup():
     initialize()
-    threading.Thread(target=sync_registry_loop, daemon=True, name="mlflow-production-alias").start()
-
-
-def sync_registry_loop():
-    while True:
-        try:
-            sync_production_alias(active_model())
-        except HTTPException as exc:
-            if exc.status_code != 503:
-                logging.exception("Could not sync the MLflow production alias")
-        except Exception:
-            logging.exception("Could not sync the MLflow production alias")
-        time.sleep(15)
-
 
 def active_model():
+    version = production_version()
+    if version is None:
+        raise HTTPException(503, "В MLflow пока нет production-модели. Запустите DAG, затем назначьте alias production.")
     with connect() as conn, conn.cursor() as cur:
         cur.execute("""SELECT r.mlflow_run_id,r.git_commit,r.model_uri,r.roc_auc,r.airflow_run_id
-            FROM app.active_model a JOIN app.model_runs r USING(mlflow_run_id) WHERE a.singleton""")
+            FROM app.model_runs r WHERE r.mlflow_run_id=%s AND r.model_uri=%s""",
+            (version.run_id, version.source))
         row = cur.fetchone()
     if row is None:
-        raise HTTPException(503, "Модель ещё не обучена. Запустите demo_04_train_and_publish в Airflow.")
-    return dict(zip(["mlflow_run_id", "git_commit", "model_uri", "roc_auc", "airflow_run_id"], row))
+        raise HTTPException(503, "Выбранная в MLflow версия не была обучена этим демо-проектом")
+    return dict(zip(["mlflow_run_id", "git_commit", "model_uri", "roc_auc", "airflow_run_id"], row)) | {
+        "registered_model": MODEL_NAME, "model_version": str(version.version), "model_alias": PRODUCTION_ALIAS,
+    }
+
+
+def serving_model():
+    """Load and validate the selected version before recording it as served."""
+    info = active_model()
+    with _lock:
+        if _cache.get("model_version") != info["model_version"]:
+            try:
+                with metrics.LOAD_TIME.time():
+                    loaded = mlflow.sklearn.load_model(info["model_uri"])
+                    sample = pd.DataFrame([{"tenure_months": 6, "monthly_spend": 120.0,
+                                            "support_tickets": 5}], columns=FEATURES)
+                    probability = loaded.predict_proba(sample)
+                    if probability.shape != (1, 2):
+                        raise ValueError("Model must return probabilities for two classes")
+            except Exception as exc:
+                metrics.LOADS.labels("error").inc()
+                raise HTTPException(503, "Не удалось загрузить или проверить выбранную модель") from exc
+            with connect() as conn, conn.cursor() as cur:
+                cur.execute("""INSERT INTO app.active_model(singleton,mlflow_run_id) VALUES(true,%s)
+                    ON CONFLICT(singleton) DO UPDATE SET mlflow_run_id=excluded.mlflow_run_id,activated_at=now()
+                    WHERE app.active_model.mlflow_run_id IS DISTINCT FROM excluded.mlflow_run_id""",
+                    (info["mlflow_run_id"],))
+            _cache.update(model_version=info["model_version"], model=loaded)
+            metrics.LOADS.labels("success").inc()
+        return info, _cache["model"]
 
 
 @app.get("/health")
@@ -91,7 +108,7 @@ def health():
 
 @app.get("/model")
 def model_info():
-    return active_model()
+    return serving_model()[0]
 
 
 @app.get("/version")
@@ -101,18 +118,7 @@ def version():
 
 @app.post("/predict")
 def predict(customer: Customer):
-    info = active_model()
-    with _lock:
-        if _cache.get("run_id") != info["mlflow_run_id"]:
-            try:
-                with metrics.LOAD_TIME.time():
-                    loaded = mlflow.sklearn.load_model(info["model_uri"])
-            except Exception:
-                metrics.LOADS.labels("error").inc()
-                raise
-            metrics.LOADS.labels("success").inc()
-            _cache.update(run_id=info["mlflow_run_id"], model=loaded)
-        model = _cache["model"]
+    info, model = serving_model()
     features = customer.model_dump()
     probability = float(model.predict_proba(pd.DataFrame([features], columns=FEATURES))[0, 1])
     with connect() as conn, conn.cursor() as cur:

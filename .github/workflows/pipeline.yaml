@@ -25,7 +25,7 @@ jobs:
     outputs:
       image: ${{ steps.publish.outputs.image }}
     env:
-      PLATFORM_IMAGE: ghcr.io/sergey445512/airflow-ml-service-demo@sha256:b5a51c53a8df8c8f329403f1ccfdad84c675335fed574d819681fabdf3bda630
+      PLATFORM_IMAGE: ml-airflow-demo:ci-platform
       SERVICE_IMAGE: ml-airflow-demo:ci-service
       COMPOSE_PROJECT_NAME: ml-ci
     steps:
@@ -38,9 +38,10 @@ jobs:
           registry: ghcr.io
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
-      - name: Build only the service image
+      - name: Build platform image for integration tests
+        run: docker build -f Dockerfile --build-arg SOURCE_REVISION="$GITHUB_SHA" -t "$PLATFORM_IMAGE" .
+      - name: Build service image
         run: |
-          docker pull "$PLATFORM_IMAGE"
           docker build -f Dockerfile.service --build-arg SOURCE_REVISION="$GITHUB_SHA" --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" -t "$SERVICE_IMAGE" .
       - name: Validate configuration and dependencies
         run: |

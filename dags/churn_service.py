@@ -14,8 +14,11 @@ from airflow.sdk import dag, task, get_current_context
 1. Seed synthetic customers in PostgreSQL.
 2. Index historical customers in Qdrant for similarity search.
 3. Train and log a real small model in MLflow, including Git commit.
-4. Activate the model in PostgreSQL.
-5. Call online inference and verify it loaded this exact model.
+4. Register a candidate version in MLflow. The first version gets alias `production`.
+5. Check the candidate and call online inference with the currently selected version.
+
+To promote a later candidate, open MLflow Models → churn-prediction and move the
+`production` alias to its version. The service will load it on the next request.
 
 Open http://localhost:8000 to try a prediction and http://localhost:5000 for MLflow.
 """)
@@ -51,12 +54,18 @@ def service_pipeline():
     @task(retries=2, retry_delay=timedelta(seconds=10))
     def verify_online_prediction(result):
         import requests
+        from mlflow import MlflowClient
+
+        candidate = MlflowClient().get_model_version("churn-prediction", result["model_version"])
+        if candidate.run_id != result["mlflow_run_id"]:
+            raise ValueError("Candidate version does not match the training run")
         response = requests.post("http://inference:8000/predict", json={"tenure_months": 6, "monthly_spend": 120, "support_tickets": 5}, timeout=120)
         response.raise_for_status()
         prediction = response.json()
-        if prediction["mlflow_run_id"] != result["mlflow_run_id"]:
-            raise ValueError("Service is using a different model")
-        logging.info("Online prediction with published model: %s", prediction)
+        production = MlflowClient().get_model_version_by_alias("churn-prediction", "production")
+        if prediction["mlflow_run_id"] != production.run_id:
+            raise ValueError("Service is not serving the MLflow production alias")
+        logging.info("Candidate version %s; currently served: %s", result["model_version"], prediction)
         return prediction
 
     verify_online_prediction(publish_model(train_and_log(index_customers(prepare_data()))))
