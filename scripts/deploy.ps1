@@ -21,6 +21,10 @@ function PlatformContainers {
 
 $sourceRoot = Split-Path -Parent $PSScriptRoot
 $releaseDir = Join-Path $DeploymentRoot "releases\$Revision"
+if (Test-Path -LiteralPath $releaseDir) {
+    # A rollback can deploy the same revision again; keep the earlier release record.
+    $releaseDir = Join-Path $DeploymentRoot "releases\$Revision-$(Get-Date -Format 'yyyyMMddTHHmmssfff')"
+}
 $stateFile = Join-Path $DeploymentRoot 'current.json'
 $previousFile = Join-Path $releaseDir 'previous.compose.json'
 $previousState = $null
@@ -36,13 +40,19 @@ $platformBefore = @(PlatformContainers)
 if ($platformBefore.Count -lt 5) { throw 'Platform services are not all running' }
 
 $env:PLATFORM_IMAGE = $platformImage
-$env:SERVICE_IMAGE = $Image
 if (-not $SkipPull) { DockerCommand -DockerArgs @('pull', $Image) }
 $imageDetails = (& docker image inspect $Image | ConvertFrom-Json)[0]
 if ($LASTEXITCODE -ne 0) { throw 'Cannot inspect the service image' }
 if ($imageDetails.Config.Labels.'org.opencontainers.image.revision' -ne $Revision) {
     throw 'Service image revision does not match requested commit'
 }
+$resolvedImage = $Image
+if ($Image -notmatch '@sha256:') {
+    $repository = $Image.Substring(0, $Image.LastIndexOf(':'))
+    $resolvedImage = $imageDetails.RepoDigests | Where-Object { $_ -like "${repository}@sha256:*" } | Select-Object -First 1
+    if (-not $resolvedImage) { throw "Cannot resolve an immutable digest for $Image" }
+}
+$env:SERVICE_IMAGE = $resolvedImage
 
 New-Item -ItemType Directory -Force -Path $releaseDir | Out-Null
 $oldInferenceId = & docker ps -q --filter 'label=com.docker.compose.project=ml-airflow-demo' --filter 'label=com.docker.compose.service=inference'
@@ -81,10 +91,12 @@ try {
     DockerCommand -DockerArgs ($composeArgs + @('exec', '-T', 'inference', 'python', 'scripts/verify_stores.py'))
     DockerCommand -DockerArgs ($composeArgs + @('exec', '-T', 'inference', 'python', 'scripts/verify_traffic.py'))
     DockerCommand -DockerArgs @('exec', $airflowId, 'python', '/opt/demo/scripts/verify_monitoring.py')
-    $state = @{ image=$Image; revision=$Revision; platform_image=$platformImage;
+    $state = @{ image=$resolvedImage; revision=$Revision; platform_image=$platformImage;
         platform_revision=$platformRevision; release_dir=$releaseDir;
         deployed_at=(Get-Date).ToUniversalTime().ToString('o') }
-    [IO.File]::WriteAllText($stateFile, ($state | ConvertTo-Json))
+    $stateJson = $state | ConvertTo-Json
+    [IO.File]::WriteAllText((Join-Path $releaseDir 'release.json'), $stateJson)
+    [IO.File]::WriteAllText($stateFile, $stateJson)
     Write-Output "Service deployed: $Revision; platform retained: $platformRevision"
 } catch {
     $failure = $_

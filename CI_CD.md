@@ -50,7 +50,19 @@ powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-runner.p
 5. Обновить http://localhost:8000 и открыть http://localhost:8000/version: SHA соответствует опубликованному коммиту. Сравнить ID контейнеров Airflow/MLflow до и после CD — они не меняются.
 6. В `/model` остаётся commit обучения текущей модели. Это другая версия: доставка кода не означает переобучение.
 
-Конфигурации релизов находятся в `D:\projects\_deploy\ml-airflow-demo\releases\<SHA>`, текущий релиз записан в `current.json`. Исходная папка проекта остаётся рабочим Git-checkout; её локальные правки после CD не меняют работающий сервис.
+Конфигурации релизов находятся в `D:\projects\_deploy\ml-airflow-demo\releases\<SHA>` (при повторной выкатке того же SHA добавляется дата и время), текущий релиз записан в `current.json`. Новые релизы также сохраняют `release.json` с точным образом и SHA. Исходная папка проекта остаётся рабочим Git-checkout; её локальные правки после CD не меняют работающий сервис.
+
+Для ручного отката уже успешной выкатки найдите полный SHA прежнего коммита. В GitHub Actions откройте **Roll back ML service → Run workflow**, выберите ветку `main` и вставьте SHA в поле `revision`. Workflow авторизуется в GHCR временным `GITHUB_TOKEN`, затем запускает тот же скрипт деплоя с проверками.
+
+Локально можно сначала посмотреть план, а затем запустить откат (Docker должен быть авторизован в приватном GHCR с правом `read:packages`):
+
+```powershell
+cd D:\ml-platform-demo
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\rollback.ps1 -Revision PASTE_FULL_SHA -Preview
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\rollback.ps1 -Revision PASTE_FULL_SHA
+```
+
+Скрипт использует точный digest из `release.json`, если прежний релиз его сохранил; для более старых релизов загружает образ из GHCR по тегу коммита. Он проверяет SHA внутри образа, обновляет только `inference` и `traffic`, выполняет smoke checks и при ошибке возвращает предыдущую версию. Airflow, MLflow и хранилища не переключаются. Не удаляйте нужные версии образа из GHCR: локальный кеш Docker может быть очищен.
 
 Обычный `docker compose up` из рабочей папки возвращает режим разработки с bind mounts. Для управляемого релиза ML-сервиса использовать workflow или `scripts/deploy.ps1`, а не смешивать эти способы запуска во время показа. Один экземпляр API на порту 8000 кратковременно недоступен при замене; схема не обещает zero-downtime.
 

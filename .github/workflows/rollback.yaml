@@ -1,0 +1,54 @@
+name: Roll back ML service
+
+on:
+  workflow_dispatch:
+    inputs:
+      revision:
+        description: Full 40-character SHA of a previously published service commit
+        required: true
+        type: string
+
+permissions:
+  contents: read
+  packages: read
+
+concurrency:
+  group: ml-demo-${{ github.ref }}
+  cancel-in-progress: false
+
+jobs:
+  rollback:
+    name: Restore verified service image
+    if: github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, Windows, X64, ml-demo]
+    timeout-minutes: 20
+    defaults:
+      run:
+        shell: powershell
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - name: Validate target revision
+        env:
+          TARGET_REVISION: ${{ inputs.revision }}
+        run: |
+          if ($env:TARGET_REVISION -cnotmatch '^[0-9a-f]{40}$') {
+            throw 'Enter the complete lowercase 40-character commit SHA.'
+          }
+      - name: Authenticate image download
+        uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Restore previous service image
+        env:
+          TARGET_REVISION: ${{ inputs.revision }}
+        run: ./scripts/rollback.ps1 -Revision $env:TARGET_REVISION
+      - name: Deployment summary
+        env:
+          TARGET_REVISION: ${{ inputs.revision }}
+        run: |
+          "Rolled back to commit: $env:TARGET_REVISION" >> $env:GITHUB_STEP_SUMMARY
+          'Local service: http://localhost:8000' >> $env:GITHUB_STEP_SUMMARY
