@@ -686,18 +686,42 @@
       }
     },
     {
+      "id": 18,
+      "title": "Redis · попадания и новые поиски / сек",
+      "type": "timeseries",
+      "gridPos": { "x": 0, "y": 30, "w": 12, "h": 7 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "sum by(result) (rate(demo_neighbor_cache_lookups_total[$__rate_interval]))", "legendFormat": "{{result}}" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "reqps", "decimals": 3 }, "overrides": [] },
+      "options": { "tooltip": { "mode": "multi" }, "legend": { "displayMode": "list", "placement": "bottom" } }
+    },
+    {
+      "id": 19,
+      "title": "Qdrant · задержка поиска p95",
+      "type": "timeseries",
+      "gridPos": { "x": 12, "y": 30, "w": 12, "h": 7 },
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "targets": [
+        { "refId": "A", "expr": "histogram_quantile(0.95, sum by(le) (rate(demo_qdrant_query_duration_seconds_bucket[$__rate_interval])))", "legendFormat": "p95" }
+      ],
+      "fieldConfig": { "defaults": { "unit": "s", "decimals": 3 }, "overrides": [] },
+      "options": { "tooltip": { "mode": "multi" }, "legend": { "displayMode": "list", "placement": "bottom" } }
+    },
+    {
       "id": 17,
       "title": "Как читать дашборд",
       "type": "text",
       "gridPos": {
         "x": 0,
-        "y": 30,
+        "y": 37,
         "w": 24,
         "h": 5
       },
       "options": {
         "mode": "markdown",
-        "content": "**ROC AUC — метрика на отложенной синтетической выборке при обучении.** Качество на реальных запросах потребовало бы фактических ответов (labels). Изменения вероятностей и признаков — повод проверить данные, сами по себе они не доказывают деградацию модели.\n\nГрафики показывают только новые запросы после подключения мониторинга. Счётчики сбрасываются при перезапуске API; `rate` учитывает сброс. История Prometheus хранится 15 дней. Версия — указатель опубликованной модели в БД; сервис загружает её при следующем запросе.\n\nДля демонстрации запустите `scripts/demo_traffic.py` (normal / high-risk). При отсутствии трафика графики долей и задержек могут быть пустыми."
+        "content": "**ROC AUC — метрика на отложенной синтетической выборке при обучении.** Качество на реальных запросах потребовало бы фактических ответов (labels). Изменения вероятностей и признаков — повод проверить данные, сами по себе они не доказывают деградацию модели.\n\nГрафики показывают только новые запросы после подключения мониторинга. Счётчики сбрасываются при перезапуске API; `rate` учитывает сброс. История Prometheus хранится 15 дней. Версия — указатель опубликованной модели в БД; сервис загружает её при следующем запросе.\n\nПостоянный синтетический поток создаёт прогнозы. Чтобы увидеть панели Redis и Qdrant, дважды нажмите «Найти похожих» на главной странице сервиса: первый поиск идёт в Qdrant, повторный берётся из Redis."
       }
     }
   ],
@@ -715,6 +739,16 @@
     {
       "title": "Airflow",
       "url": "http://localhost:8080",
+      "targetBlank": true
+    },
+    {
+      "title": "Qdrant",
+      "url": "http://localhost:6333/dashboard",
+      "targetBlank": true
+    },
+    {
+      "title": "Redis Insight",
+      "url": "http://localhost:5540",
       "targetBlank": true
     }
   ]

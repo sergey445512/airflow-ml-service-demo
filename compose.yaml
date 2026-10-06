@@ -8,6 +8,8 @@ x-app: &app
     DEMO_DATABASE_URL: postgresql://demo:demo_local@postgres:5432/demo
     MLFLOW_TRACKING_URI: http://mlflow:5000
     MLFLOW_EXPERIMENT_NAME: churn-online-demo
+    QDRANT_URL: http://qdrant:6333
+    REDIS_URL: redis://redis:6379/0
   depends_on:
     postgres:
       condition: service_healthy
@@ -20,6 +22,58 @@ x-s3-env: &s3-env
   S3_BUCKET: mlflow-artifacts
 
 services:
+  redis:
+    image: redis:7.4.5
+    command: [redis-server, --save, '', --appendonly, 'no', --maxmemory, 128mb, --maxmemory-policy, allkeys-lru]
+    ports: ['127.0.0.1:6379:6379']
+    healthcheck:
+      test: [CMD, redis-cli, ping]
+      interval: 5s
+      timeout: 3s
+      retries: 20
+
+  redisinsight:
+    image: redis/redisinsight@sha256:b5e19ee240abef6edb435871b90ff8a210995422e8e018ab61c0339d318a1f84
+    environment:
+      RI_REDIS_HOST0: redis
+      RI_REDIS_PORT0: '6379'
+      RI_REDIS_ALIAS0: ML demo cache
+    ports: ['127.0.0.1:5540:5540']
+    volumes:
+      - redisinsight-data:/data
+    depends_on:
+      redis:
+        condition: service_healthy
+
+  redisinsight-init:
+    image: ${DEMO_IMAGE:-ml-airflow-demo:local}
+    entrypoint: []
+    command: [python, /opt/demo/scripts/init_redisinsight.py]
+    volumes:
+      - .:/opt/demo:ro
+    depends_on:
+      redisinsight:
+        condition: service_started
+
+  qdrant:
+    image: qdrant/qdrant:v1.19.1
+    ports: ['127.0.0.1:6333:6333']
+    volumes:
+      - qdrant-data:/qdrant/storage
+
+  qdrant-init:
+    image: ${DEMO_IMAGE:-ml-airflow-demo:local}
+    entrypoint: []
+    command: [python, /opt/demo/scripts/init_qdrant.py]
+    environment: *env
+    volumes:
+      - .:/opt/demo:ro
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qdrant:
+        condition: service_started
+
   prometheus:
     image: prom/prometheus:v3.14.0
     command: ['--config.file=/etc/prometheus/prometheus.yml', '--storage.tsdb.path=/prometheus', '--storage.tsdb.retention.time=15d']
@@ -124,6 +178,8 @@ services:
     depends_on:
       mlflow:
         condition: service_healthy
+      qdrant-init:
+        condition: service_completed_successfully
     command: standalone
     environment:
       <<: *env
@@ -141,6 +197,13 @@ services:
 
   inference:
     <<: *app
+    depends_on:
+      postgres:
+        condition: service_healthy
+      qdrant-init:
+        condition: service_completed_successfully
+      redis:
+        condition: service_healthy
     entrypoint: []
     command: [uvicorn, service.app:app, --host, 0.0.0.0, --port, '8000']
     ports: ['127.0.0.1:8000:8000']
@@ -171,6 +234,8 @@ services:
         condition: service_healthy
 
 volumes:
+  qdrant-data:
+  redisinsight-data:
   prometheus-data:
   grafana-data:
   postgres-data:

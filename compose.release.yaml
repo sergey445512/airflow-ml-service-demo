@@ -9,6 +9,10 @@ services:
     volumes: !reset []
   traffic:
     volumes: !reset []
+  qdrant-init:
+    volumes: !reset []
+  redisinsight-init:
+    volumes: !reset []
   s3-init:
     volumes: !override
       - mlflow-artifacts:/legacy-artifacts:ro

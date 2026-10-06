@@ -50,6 +50,8 @@ jobs:
         run: |
           docker compose -p ml-ci exec -T inference python scripts/verify_monitoring.py
           docker compose -p ml-ci exec -T inference python scripts/verify_traffic.py
+      - name: Verify Qdrant, Redis and their user interfaces
+        run: docker compose -p ml-ci exec -T inference python scripts/verify_stores.py
       - name: Publish tested image
         id: publish
         if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'

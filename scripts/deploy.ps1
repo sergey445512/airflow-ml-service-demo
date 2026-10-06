@@ -36,7 +36,7 @@ if ($currentId) {
     $configJson = & docker @oldArgs config --format json
     if ($LASTEXITCODE -ne 0) { throw 'Cannot capture previous deployment configuration' }
     $previous = $configJson | ConvertFrom-Json
-    foreach ($service in @('airflow', 'mlflow', 'inference', 's3-init', 'traffic')) {
+    foreach ($service in @('airflow', 'mlflow', 'inference', 's3-init', 'traffic', 'qdrant-init', 'redisinsight-init')) {
         if ($previous.services.PSObject.Properties.Name -contains $service) {
             $previous.services.$service.image = $container.Image
             $previous.services.$service.PSObject.Properties.Remove('build')
@@ -54,6 +54,7 @@ try {
     DockerCommand -DockerArgs ($composeArgs + @('exec', '-T', 'inference', 'python', 'scripts/smoke_release.py', '--revision', $Revision))
     DockerCommand -DockerArgs ($composeArgs + @('exec', '-T', 'inference', 'python', 'scripts/verify_monitoring.py'))
     DockerCommand -DockerArgs ($composeArgs + @('exec', '-T', 'inference', 'python', 'scripts/verify_traffic.py'))
+    DockerCommand -DockerArgs ($composeArgs + @('exec', '-T', 'inference', 'python', 'scripts/verify_stores.py'))
     $state = @{ image=$Image; revision=$Revision; release_dir=$releaseDir; deployed_at=(Get-Date).ToUniversalTime().ToString('o') }
     [IO.File]::WriteAllText($stateFile, ($state | ConvertTo-Json))
     Write-Output "Deployed $Revision using $Image"

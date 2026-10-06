@@ -22,6 +22,13 @@ FEATURES = {
 }
 LOADS = Counter("demo_model_loads", "Model load attempts", ["result"])
 LOAD_TIME = Histogram("demo_model_load_duration_seconds", "Model load latency", buckets=(.1, .5, 1, 2, 5, 10, 30, 60))
+NEIGHBOR_CACHE = Counter("demo_neighbor_cache_lookups", "Similar customer cache lookups", ["result"])
+for result in ("hit", "miss", "unavailable"):
+    NEIGHBOR_CACHE.labels(result)
+QDRANT_QUERIES = Counter("demo_qdrant_queries", "Qdrant nearest-neighbor queries", ["result"])
+for result in ("success", "error"):
+    QDRANT_QUERIES.labels(result)
+QDRANT_LATENCY = Histogram("demo_qdrant_query_duration_seconds", "Qdrant query latency", buckets=(.005, .01, .025, .05, .1, .25, .5, 1, 2, 5))
 
 
 class ModelCollector:

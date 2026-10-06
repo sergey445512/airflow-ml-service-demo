@@ -21,7 +21,9 @@ docker compose exec airflow cat /opt/airflow/simple_auth_manager_passwords.json.
 | MLflow | http://localhost:5000 | Эксперимент `churn-online-demo`, параметры, метрики, модель |
 | S3 / RustFS | http://localhost:9001 | Bucket `mlflow-artifacts` и настоящие файлы моделей |
 | PostgreSQL / Adminer | http://localhost:8081 | Таблицы клиентов, моделей и предсказаний |
-| API | http://localhost:8000/docs | `POST /predict` прямо из браузера |
+| Qdrant | http://localhost:6333/dashboard | Коллекция `customers_synthetic_v1`, 1200 клиентов и их векторы |
+| Redis Insight | http://localhost:5540 | Ключи кэша повторного поиска, TTL и команды Redis |
+| API | http://localhost:8000/docs | `POST /predict` и `POST /neighbors` прямо из браузера |
 
 В Adminer выбрать **PostgreSQL**, сервер `postgres`, пользователь `demo`, пароль `demo_local`, база `demo`, схема `app`. Это учебные реквизиты. Порты интерфейсов привязаны к localhost; PostgreSQL доступен внутри сети Compose.
 
@@ -33,7 +35,9 @@ docker compose exec airflow cat /opt/airflow/simple_auth_manager_passwords.json.
 flowchart LR
     G[Git: код и параметры] --> A[Airflow: запуск DAG]
     P[(PostgreSQL: клиенты)] --> T[Обучение модели]
+    P --> Q[(Qdrant: похожие клиенты)]
     A --> T
+    A --> Q
     T --> M[MLflow: параметры, метрики, модель]
     T --> V[(PostgreSQL: активная версия)]
     M <--> O[(S3 / RustFS: файлы моделей)]
@@ -41,15 +45,40 @@ flowchart LR
     V --> S
     U[Форма / POST predict] --> S
     S --> R[(PostgreSQL: предсказания)]
+    U --> N[Поиск похожих]
+    N --> C[(Redis: кэш 5 минут)]
+    N --> Q
 ```
 
-Шаги DAG-а: `prepare_data → train_and_log → publish_model → verify_online_prediction`.
+Шаги DAG-а: `prepare_data → index_customers → train_and_log → publish_model → verify_online_prediction`.
 
 - Подготовка создаёт 1200 воспроизводимых клиентов; повторный запуск не дублирует строки.
+- Индексация переводит три признака клиента в числовой вектор и сохраняет его в Qdrant. Отдельный `qdrant-init` готовит коллекцию при первом запуске стенда, поэтому поиск работает и до нового запуска DAG.
 - Обучение читает PostgreSQL, делит данные на train/holdout и обучает модель. MLflow получает ROC AUC, accuracy, параметры, Git commit, признак незакоммиченных изменений, Airflow run ID, конфигурацию и исходник обучения.
 - Публикация сохраняет модель в `app.model_runs` и меняет указатель `app.active_model` одной транзакцией.
 - Последняя задача отправляет реальный HTTP-запрос сервису и проверяет, что он использует именно опубликованный MLflow run ID.
 - Сервис перед запросом проверяет активную версию. Новую модель загружает из MLflow, затем держит в памяти. Каждый прогноз записывается в `app.predictions`.
+
+## Поиск похожих клиентов и кэш
+
+На главной странице сервиса введите признаки клиента и дважды нажмите **Найти похожих**.
+Первый запрос `/neighbors` ищет пять ближайших исторических клиентов в Qdrant,
+второй читает тот же результат из Redis. Ответ явно показывает `cache_hit` и
+`cache_status`. Если поменять признаки, получится новый запрос к Qdrant.
+Кэш хранится 5 минут и не сохраняется на диск; при остановке Redis поиск
+продолжает работать через Qdrant, в ответе будет `cache_status: unavailable`.
+
+В Qdrant откройте коллекцию `customers_synthetic_v1` и покажите 1200 точек:
+у каждой есть три нормированных признака для поиска и обычные поля в payload.
+Исторический отток в payload — метка учебного клиента, а не прогноз модели.
+Qdrant не хранит файлы моделей: они остаются в S3. Redis Insight автоматически
+подключён к Redis; в Browser найдите ключи `neighbors:v1:*` и посмотрите TTL.
+Чтобы увидеть новый ключ, повторите поиск на странице сервиса и обновите Redis Insight.
+При необходимости проверить кэш в консоли:
+
+```powershell
+docker compose exec redis redis-cli --scan --pattern 'neighbors:v1:*'
+```
 
 MLflow хранит метаданные в PostgreSQL в схеме `public`, учебные таблицы находятся в `app`. Файлы моделей хранятся в S3-совместимом RustFS и передаются через MLflow. Сам RustFS сохраняет объекты в Docker volume `ml-airflow-demo_s3-data`. Airflow для компактности использует свою локальную базу в volume.
 
@@ -72,10 +101,10 @@ docker compose exec mlflow python scripts/verify_s3.py
 ## Сценарий демонстрации на 20–25 минут
 
 1. **GitHub.** Показать `service/app.py`, `src/pipeline.py`, `dags/churn_service.py`, `model_config.json`.
-2. **Airflow.** Запустить DAG 04, открыть граф и логи, показать зависимости и статусы. В XCom только небольшие результаты и идентификаторы; данные остаются в PostgreSQL.
+2. **Airflow.** Запустить DAG 04, открыть граф и логи, показать этап `index_customers`, зависимости и статусы. В XCom только небольшие результаты и идентификаторы; данные остаются в PostgreSQL и Qdrant.
 3. **PostgreSQL.** В схеме `app` открыть `customers`, `model_runs`, `active_model`, найти идентификатор обучения.
 4. **MLflow и S3.** Открыть `churn-online-demo`, параметры, holdout-метрики, теги `git_commit` и `airflow_run_id`, вкладку Models. Скопировать model ID и найти соответствующую папку в bucket `mlflow-artifacts` в RustFS. Показать сам файл `model.pkl`.
-5. **Инференс.** Отправить несколько запросов через форму, меняя число обращений в поддержку. Показать `/docs`, затем новые строки `app.predictions`.
+5. **Инференс и поиск.** Отправить несколько запросов через форму, меняя число обращений в поддержку. Дважды нажать «Найти похожих»: первый ответ от Qdrant, второй из Redis. Показать `/docs`, затем новые строки `app.predictions`.
 6. **Изменение из GitHub.** Отдельным коммитом поменять `max_depth` с 8 на 12 в `model_config.json`, получить изменения локально и снова запустить DAG. Сравнить два запуска в MLflow; в сервисе показать новый commit и run ID.
 7. **Ошибки и retries.** При необходимости перейти к DAG-ам 01–03: подробный сценарий в [AIRFLOW_GUIDE.md](AIRFLOW_GUIDE.md).
 

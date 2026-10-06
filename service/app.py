@@ -5,6 +5,8 @@ from pathlib import Path
 
 import mlflow.sklearn
 import pandas as pd
+import redis
+import requests
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse, Response
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
@@ -12,6 +14,7 @@ from pydantic import BaseModel, Field
 
 from src.pipeline import FEATURES, connect, initialize
 from src.revision import code_revision
+from src.neighbors import CACHE_TTL_SECONDS, COLLECTION, cache_client, cache_key, find_neighbors
 from service import metrics
 
 app = FastAPI(title="Churn demo — online inference", version="1.0")
@@ -43,6 +46,10 @@ class Customer(BaseModel):
     tenure_months: int = Field(ge=1, le=72, examples=[6])
     monthly_spend: float = Field(ge=10, le=200, examples=[120])
     support_tickets: int = Field(ge=0, le=8, examples=[5])
+
+
+class SimilarCustomer(Customer):
+    limit: int = Field(default=5, ge=1, le=10)
 
 
 @app.on_event("startup")
@@ -100,6 +107,41 @@ def predict(customer: Customer):
     for feature, histogram in metrics.FEATURES.items():
         histogram.observe(features[feature])
     return {"churn_probability": round(probability, 4), "prediction": int(probability >= 0.5), **info}
+
+
+@app.post("/neighbors")
+def neighbors(customer: SimilarCustomer):
+    """Show similar historical customers; repeated requests are cached in Redis."""
+    features = {feature: getattr(customer, feature) for feature in FEATURES}
+    key = cache_key(features, customer.limit)
+    client = None
+    try:
+        client = cache_client()
+        cached = client.get(key)
+    except redis.RedisError:
+        cached = None
+        client = None
+    if cached is not None:
+        metrics.NEIGHBOR_CACHE.labels("hit").inc()
+        return {"neighbors": json.loads(cached), "cache_hit": True,
+                "cache_status": "hit", "collection": COLLECTION}
+
+    status = "miss" if client is not None else "unavailable"
+    try:
+        with metrics.QDRANT_LATENCY.time():
+            found = find_neighbors(features, customer.limit)
+    except requests.RequestException as exc:
+        metrics.QDRANT_QUERIES.labels("error").inc()
+        raise HTTPException(503, "Поиск похожих клиентов пока недоступен") from exc
+    metrics.QDRANT_QUERIES.labels("success").inc()
+    if client is not None:
+        try:
+            client.setex(key, CACHE_TTL_SECONDS, json.dumps(found))
+        except redis.RedisError:
+            status = "unavailable"
+    metrics.NEIGHBOR_CACHE.labels(status).inc()
+    return {"neighbors": found, "cache_hit": False,
+            "cache_status": status, "collection": COLLECTION}
 
 
 @app.get("/", response_class=HTMLResponse)
