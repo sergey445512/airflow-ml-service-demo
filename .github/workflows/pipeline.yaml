@@ -56,6 +56,8 @@ jobs:
         run: |
           docker compose -p ml-ci exec -T -e MLFLOW_ENABLE_ARTIFACTS_PROGRESS_BAR=false mlflow python scripts/verify_s3.py
           docker compose -p ml-ci exec -T inference python scripts/smoke_release.py --revision "$GITHUB_SHA"
+      - name: Verify production alias in MLflow
+        run: docker compose -p ml-ci exec -T inference python scripts/verify_registry.py
       - name: Verify Prometheus and Grafana
         run: |
           docker compose -p ml-ci exec -T airflow python scripts/verify_monitoring.py

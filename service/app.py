@@ -1,4 +1,5 @@
 import json
+import logging
 import threading
 import time
 from pathlib import Path
@@ -16,6 +17,7 @@ from src.pipeline import FEATURES, connect, initialize
 from src.revision import code_revision
 from src.neighbors import CACHE_TTL_SECONDS, COLLECTION, cache_client, cache_key, find_neighbors
 from service import metrics
+from service.model_registry import sync_production_alias
 
 app = FastAPI(title="Churn demo — online inference", version="1.0")
 _lock = threading.Lock()
@@ -55,6 +57,19 @@ class SimilarCustomer(Customer):
 @app.on_event("startup")
 def startup():
     initialize()
+    threading.Thread(target=sync_registry_loop, daemon=True, name="mlflow-production-alias").start()
+
+
+def sync_registry_loop():
+    while True:
+        try:
+            sync_production_alias(active_model())
+        except HTTPException as exc:
+            if exc.status_code != 503:
+                logging.exception("Could not sync the MLflow production alias")
+        except Exception:
+            logging.exception("Could not sync the MLflow production alias")
+        time.sleep(15)
 
 
 def active_model():

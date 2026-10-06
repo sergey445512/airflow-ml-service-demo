@@ -56,6 +56,7 @@ flowchart LR
 - Индексация переводит три признака клиента в числовой вектор и сохраняет его в Qdrant. Отдельный `qdrant-init` готовит коллекцию при первом запуске стенда, поэтому поиск работает и до нового запуска DAG.
 - Обучение читает PostgreSQL, делит данные на train/holdout и обучает модель. MLflow получает ROC AUC, accuracy, параметры, Git commit, признак незакоммиченных изменений, Airflow run ID, конфигурацию и исходник обучения.
 - Публикация сохраняет модель в `app.model_runs` и меняет указатель `app.active_model` одной транзакцией.
+- Онлайн-сервис сверяет этот указатель с MLflow Model Registry и помечает рабочую версию alias `production`. В MLflow откройте **Models → churn-prediction**: нужная версия видна без поиска по длинному model ID. Alias обновляется после смены активной модели.
 - Последняя задача отправляет реальный HTTP-запрос сервису и проверяет, что он использует именно опубликованный MLflow run ID.
 - Сервис перед запросом проверяет активную версию. Новую модель загружает из MLflow, затем держит в памяти. Каждый прогноз записывается в `app.predictions`.
 
@@ -103,7 +104,7 @@ docker compose exec mlflow python scripts/verify_s3.py
 1. **GitHub.** Показать `service/app.py`, `src/pipeline.py`, `dags/churn_service.py`, `model_config.json`.
 2. **Airflow.** Запустить DAG 04, открыть граф и логи, показать этап `index_customers`, зависимости и статусы. В XCom только небольшие результаты и идентификаторы; данные остаются в PostgreSQL и Qdrant.
 3. **PostgreSQL.** В схеме `app` открыть `customers`, `model_runs`, `active_model`, найти идентификатор обучения.
-4. **MLflow и S3.** Открыть `churn-online-demo`, параметры, holdout-метрики, теги `git_commit` и `airflow_run_id`, вкладку Models. Скопировать model ID и найти соответствующую папку в bucket `mlflow-artifacts` в RustFS. Показать сам файл `model.pkl`.
+4. **MLflow и S3.** Открыть **Models → churn-prediction** и показать версию с alias `production`. Затем открыть её запуск в `churn-online-demo`, параметры, holdout-метрики, теги `git_commit` и `airflow_run_id`. Скопировать model ID и найти соответствующую папку в bucket `mlflow-artifacts` в RustFS. Показать сам файл `model.pkl`.
 5. **Инференс и поиск.** Отправить несколько запросов через форму, меняя число обращений в поддержку. Дважды нажать «Найти похожих»: первый ответ от Qdrant, второй из Redis. Показать `/docs`, затем новые строки `app.predictions`.
 6. **Изменение из GitHub.** Отдельным коммитом поменять `max_depth` с 8 на 12 в `model_config.json`, получить изменения локально и снова запустить DAG. Сравнить два запуска в MLflow; в сервисе показать новый commit и run ID.
 7. **Ошибки и retries.** При необходимости перейти к DAG-ам 01–03: подробный сценарий в [AIRFLOW_GUIDE.md](AIRFLOW_GUIDE.md).
