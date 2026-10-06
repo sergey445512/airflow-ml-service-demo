@@ -1,0 +1,75 @@
+name: ml-airflow-demo
+x-app: &app
+  image: ml-airflow-demo:local
+  build: .
+  volumes:
+    - .:/opt/demo:ro
+  environment: &env
+    PYTHONPATH: /opt/demo
+    DEMO_DATABASE_URL: postgresql://demo:demo_local@postgres:5432/demo
+    MLFLOW_TRACKING_URI: http://mlflow:5000
+    MLFLOW_EXPERIMENT_NAME: churn-online-demo
+  depends_on:
+    postgres:
+      condition: service_healthy
+
+services:
+  postgres:
+    image: postgres:16.10
+    environment:
+      POSTGRES_USER: demo
+      POSTGRES_PASSWORD: demo_local
+      POSTGRES_DB: demo
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+    healthcheck:
+      test: [CMD-SHELL, "pg_isready -U demo -d demo"]
+      interval: 5s
+      timeout: 5s
+      retries: 20
+
+  mlflow:
+    <<: *app
+    entrypoint: []
+    command: [mlflow, server, --host, 0.0.0.0, --port, '5000', --backend-store-uri, 'postgresql://demo:demo_local@postgres:5432/demo', --artifacts-destination, /mlartifacts, --serve-artifacts, --allowed-hosts, 'mlflow:5000,localhost:5000,127.0.0.1:5000']
+    ports: ['127.0.0.1:5000:5000']
+    volumes:
+      - .:/opt/demo:ro
+      - mlflow-artifacts:/mlartifacts
+
+  airflow:
+    <<: *app
+    command: standalone
+    environment:
+      <<: *env
+      AIRFLOW__CORE__LOAD_EXAMPLES: 'false'
+      AIRFLOW__CORE__DAGS_FOLDER: /opt/demo/dags
+      AIRFLOW__CORE__EXECUTOR: LocalExecutor
+      AIRFLOW__CORE__PARALLELISM: '4'
+      AIRFLOW__CORE__SIMPLE_AUTH_MANAGER_USERS: admin:admin
+      AIRFLOW__DAG_PROCESSOR__REFRESH_INTERVAL: '10'
+      AIRFLOW__API__WORKERS: '1'
+    ports: ['127.0.0.1:8080:8080']
+    volumes:
+      - .:/opt/demo:ro
+      - airflow-data:/opt/airflow
+
+  inference:
+    <<: *app
+    entrypoint: []
+    command: [uvicorn, service.app:app, --host, 0.0.0.0, --port, '8000']
+    ports: ['127.0.0.1:8000:8000']
+
+  database-ui:
+    image: adminer:5.4.1
+    environment:
+      ADMINER_DEFAULT_SERVER: postgres
+    ports: ['127.0.0.1:8081:8080']
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+volumes:
+  postgres-data:
+  mlflow-artifacts:
+  airflow-data:

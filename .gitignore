@@ -1,0 +1,6 @@
+.venv/
+.airflow/
+__pycache__/
+*.log
+.env
+validation.json
