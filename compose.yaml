@@ -22,6 +22,21 @@ x-s3-env: &s3-env
   S3_BUCKET: mlflow-artifacts
 
 services:
+  architecture-map:
+    image: ${MAP_IMAGE:-ml-airflow-demo:map}
+    build:
+      context: .
+      dockerfile: Dockerfile.map
+    ports: ['127.0.0.1:8090:8090']
+    volumes:
+      - airflow-data:/airflow-auth:ro
+    restart: unless-stopped
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://localhost:8090/health', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+
   redis:
     image: redis:7.4.5
     command: [redis-server, --save, '', --appendonly, 'no', --maxmemory, 128mb, --maxmemory-policy, allkeys-lru]

@@ -13,6 +13,14 @@ function DockerCommand {
     if ($LASTEXITCODE -ne 0) { throw "docker failed ($LASTEXITCODE): $($DockerArgs -join ' ')" }
 }
 
+function MapEvent {
+    param([string]$Stage)
+    try {
+        $body = @{ stage=$Stage; revision=$Revision } | ConvertTo-Json -Compress
+        Invoke-RestMethod -Method Post -Uri 'http://127.0.0.1:8090/api/deploy-event' -ContentType 'application/json' -Body $body -TimeoutSec 2 | Out-Null
+    } catch { } # The observer must never block a release.
+}
+
 function PlatformContainers {
     $running = @(& docker ps --format '{{.Names}}={{.ID}}' --filter 'label=com.docker.compose.project=ml-airflow-demo')
     if ($LASTEXITCODE -ne 0) { throw 'Cannot inspect the running platform' }
@@ -40,6 +48,7 @@ $platformBefore = @(PlatformContainers)
 if ($platformBefore.Count -lt 5) { throw 'Platform services are not all running' }
 
 $env:PLATFORM_IMAGE = $platformImage
+MapEvent -Stage 'pull'
 if (-not $SkipPull) { DockerCommand -DockerArgs @('pull', $Image) }
 $imageDetails = (& docker image inspect $Image | ConvertFrom-Json)[0]
 if ($LASTEXITCODE -ne 0) { throw 'Cannot inspect the service image' }
@@ -84,9 +93,11 @@ $composeArgs = @('compose', '-p', 'ml-airflow-demo', '-f', (Join-Path $releaseDi
 $targetArgs = @('up', '-d', '--no-build', '--no-deps', '--wait', '--wait-timeout', '180', 'inference', 'traffic')
 try {
     # --no-deps and explicit service names leave Airflow, MLflow and all stores untouched.
+    MapEvent -Stage 'update'
     DockerCommand -DockerArgs ($composeArgs + $targetArgs)
     $platformAfter = @(PlatformContainers)
     if (Compare-Object $platformBefore $platformAfter) { throw 'A platform container changed during the service release' }
+    MapEvent -Stage 'verify'
     DockerCommand -DockerArgs ($composeArgs + @('exec', '-T', 'inference', 'python', 'scripts/smoke_release.py', '--revision', $Revision))
     DockerCommand -DockerArgs ($composeArgs + @('exec', '-T', 'inference', 'python', 'scripts/verify_stores.py'))
     DockerCommand -DockerArgs ($composeArgs + @('exec', '-T', 'inference', 'python', 'scripts/verify_traffic.py'))
@@ -97,9 +108,11 @@ try {
     $stateJson = $state | ConvertTo-Json
     [IO.File]::WriteAllText((Join-Path $releaseDir 'release.json'), $stateJson)
     [IO.File]::WriteAllText($stateFile, $stateJson)
+    MapEvent -Stage 'success'
     Write-Output "Service deployed: $Revision; platform retained: $platformRevision"
 } catch {
     $failure = $_
+    MapEvent -Stage 'rollback'
     Write-Warning 'Service deployment failed; restoring previous inference and traffic containers.'
     DockerCommand -DockerArgs (@('compose', '-p', 'ml-airflow-demo', '-f', $previousFile) + $targetArgs)
     if ($previousState) { [IO.File]::WriteAllText($stateFile, $previousState) }

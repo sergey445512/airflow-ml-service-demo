@@ -1,0 +1,6 @@
+FROM python:3.12-slim
+WORKDIR /app
+RUN pip install --no-cache-dir fastapi==0.116.1 uvicorn==0.35.0 requests==2.32.5
+COPY architecture_map /app/architecture_map
+EXPOSE 8090
+CMD ["uvicorn", "architecture_map.app:app", "--host", "0.0.0.0", "--port", "8090"]
