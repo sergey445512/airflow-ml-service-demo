@@ -16,9 +16,9 @@ def make_customer(rng, scenario):
     }
 
 
-def send(url, customer, path="/predict"):
+def send(url, customer):
     request = urllib.request.Request(
-        url + path, data=json.dumps(customer).encode(),
+        url + "/predict", data=json.dumps(customer).encode(),
         headers={"Content-Type": "application/json"},
     )
     try:
@@ -55,7 +55,6 @@ def main():
     current_phase = None
     counts = {}
     i = 0
-    neighbors_sample = None
     while time.monotonic() < deadline:
         now = time.monotonic()
         scenario = ("normal" if int((now - started) / args.switch_every) % 2 == 0 else "high-risk") if args.scenario == "cycle" else args.scenario
@@ -70,13 +69,6 @@ def main():
         try:
             status = send(args.url, customer)
             counts[status] = counts.get(status, 0) + 1
-            # A fresh neighbor lookup misses Redis, then the next repeats it and hits cache.
-            if i % 12 == 4:
-                neighbors_sample = {**customer, "limit": 3}
-            if i % 12 in (4, 5) and neighbors_sample is not None:
-                neighbor_status = send(args.url, neighbors_sample, "/neighbors")
-                key = "neighbors_" + str(neighbor_status)
-                counts[key] = counts.get(key, 0) + 1
         except (urllib.error.URLError, TimeoutError) as exc:
             counts["connection_error"] = counts.get("connection_error", 0) + 1
             if not args.forever:
