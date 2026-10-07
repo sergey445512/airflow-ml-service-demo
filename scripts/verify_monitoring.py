@@ -45,8 +45,11 @@ for status in ("200", "422"):
 assert sample(after, "demo_churn_probability_count") >= sample(before, "demo_churn_probability_count") + 1
 assert sample(after, "demo_predict_duration_seconds_count") >= sample(before, "demo_predict_duration_seconds_count") + 2
 info = json.loads(get("http://inference:8000/model"))
-assert sample(after, "demo_active_model_info", run_id=info["mlflow_run_id"], git_commit=info["git_commit"]) == 1
-assert math.isclose(sample(after, "demo_model_validation_roc_auc"), info["roc_auc"])
+assert sample(after, "demo_active_model_info", run_id=info["mlflow_run_id"], git_commit=info["git_commit"] or "unknown") == 1
+if info["roc_auc"] is not None:
+    assert math.isclose(sample(after, "demo_model_validation_roc_auc"), info["roc_auc"])
+else:
+    assert not any(name == "demo_model_validation_roc_auc" for name, _ in after)
 
 deadline = time.monotonic() + 60
 while True:

@@ -15,8 +15,8 @@ COPY --chown=app:app service/ ./service/
 COPY --chown=app:app src/ ./src/
 COPY --chown=app:app scripts/demo_traffic.py scripts/smoke_release.py \
     scripts/verify_stores.py scripts/verify_traffic.py scripts/verify_registry.py \
-    scripts/register_existing_models.py \
-    scripts/test_metrics.py scripts/test_model_registry.py ./scripts/
+    scripts/register_existing_models.py scripts/train_external_model.py scripts/verify_external_model.py \
+    scripts/test_metrics.py scripts/test_model_registry.py scripts/test_external_model.py ./scripts/
 
 ARG SOURCE_REVISION=local
 ENV DEMO_CODE_REVISION=${SOURCE_REVISION}

@@ -4,9 +4,12 @@ import time
 from pathlib import Path
 
 import mlflow.sklearn
+import numpy as np
 import pandas as pd
 import redis
 import requests
+from mlflow import MlflowClient
+from mlflow.exceptions import MlflowException
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import HTMLResponse, Response
 from prometheus_client import CONTENT_TYPE_LATEST, generate_latest
@@ -21,6 +24,7 @@ from service.model_registry import MODEL_NAME, PRODUCTION_ALIAS, production_vers
 app = FastAPI(title="Churn demo — online inference", version="1.0")
 _lock = threading.Lock()
 _cache = {}
+MODEL_CONTRACT = "churn-v1"
 
 
 @app.middleware("http")
@@ -57,46 +61,72 @@ class SimilarCustomer(Customer):
 def startup():
     initialize()
 
-def active_model():
-    version = production_version()
-    if version is None:
-        raise HTTPException(503, "В MLflow пока нет production-модели. Запустите DAG, затем назначьте alias production.")
-    with connect() as conn, conn.cursor() as cur:
-        cur.execute("""SELECT r.mlflow_run_id,r.git_commit,r.model_uri,r.roc_auc,r.airflow_run_id
-            FROM app.model_runs r WHERE r.mlflow_run_id=%s AND r.model_uri=%s""",
-            (version.run_id, version.source))
-        row = cur.fetchone()
-    if row is None:
-        raise HTTPException(503, "Выбранная в MLflow версия не была обучена этим демо-проектом")
-    return dict(zip(["mlflow_run_id", "git_commit", "model_uri", "roc_auc", "airflow_run_id"], row)) | {
-        "registered_model": MODEL_NAME, "model_version": str(version.version), "model_alias": PRODUCTION_ALIAS,
+def active_model(version):
+    """Read lineage from MLflow; training can happen in any process or repository."""
+    if not version.run_id:
+        raise HTTPException(503, "Версия в MLflow не связана с запуском обучения")
+    try:
+        run = MlflowClient().get_run(version.run_id)
+    except MlflowException as exc:
+        raise HTTPException(503, "Не удалось прочитать запуск модели в MLflow") from exc
+    tags = run.data.tags
+    contract = version.tags.get("model_contract") or tags.get("model_contract")
+    if contract and contract != MODEL_CONTRACT:
+        raise HTTPException(503, f"Модель требует контракт {contract}; сервис поддерживает {MODEL_CONTRACT}")
+    return {
+        "mlflow_run_id": version.run_id,
+        "git_commit": tags.get("git_commit"),
+        "model_uri": version.source,
+        "roc_auc": run.data.metrics.get("roc_auc"),
+        "airflow_run_id": tags.get("airflow_run_id"),
+        "training_source": tags.get("training_source") or ("airflow" if tags.get("airflow_run_id") else "external"),
+        "model_contract": contract or "legacy-churn-v1",
+        "registered_model": MODEL_NAME,
+        "model_version": str(version.version),
+        "model_alias": PRODUCTION_ALIAS,
     }
 
 
 def serving_model():
     """Load and validate the selected version before recording it as served."""
-    info = active_model()
+    version = production_version()
+    if version is None:
+        raise HTTPException(503, "В MLflow пока нет production-модели. Зарегистрируйте версию и назначьте alias production.")
     with _lock:
-        if _cache.get("model_version") != info["model_version"]:
+        if _cache.get("model_version") != str(version.version):
+            info = active_model(version)
             try:
                 with metrics.LOAD_TIME.time():
-                    loaded = mlflow.sklearn.load_model(info["model_uri"])
+                    loaded = mlflow.sklearn.load_model(f"models:/{MODEL_NAME}/{version.version}")
                     sample = pd.DataFrame([{"tenure_months": 6, "monthly_spend": 120.0,
                                             "support_tickets": 5}], columns=FEATURES)
-                    probability = loaded.predict_proba(sample)
-                    if probability.shape != (1, 2):
-                        raise ValueError("Model must return probabilities for two classes")
+                    probability = np.asarray(loaded.predict_proba(sample))
+                    if (list(loaded.classes_) != [0, 1] or probability.shape != (1, 2)
+                            or not np.isfinite(probability).all()
+                            or not np.allclose(probability.sum(axis=1), 1)
+                            or np.any(probability < 0) or np.any(probability > 1)):
+                        raise ValueError("Model must return probabilities for classes 0 and 1")
             except Exception as exc:
                 metrics.LOADS.labels("error").inc()
                 raise HTTPException(503, "Не удалось загрузить или проверить выбранную модель") from exc
             with connect() as conn, conn.cursor() as cur:
-                cur.execute("""INSERT INTO app.active_model(singleton,mlflow_run_id) VALUES(true,%s)
-                    ON CONFLICT(singleton) DO UPDATE SET mlflow_run_id=excluded.mlflow_run_id,activated_at=now()
-                    WHERE app.active_model.mlflow_run_id IS DISTINCT FROM excluded.mlflow_run_id""",
-                    (info["mlflow_run_id"],))
-            _cache.update(model_version=info["model_version"], model=loaded)
+                cur.execute("""INSERT INTO app.model_runs
+                    (mlflow_run_id,airflow_run_id,git_commit,roc_auc,model_uri,training_source)
+                    VALUES (%(mlflow_run_id)s,%(airflow_run_id)s,%(git_commit)s,%(roc_auc)s,%(model_uri)s,%(training_source)s)
+                    ON CONFLICT (mlflow_run_id) DO NOTHING""", info)
+                cur.execute("""INSERT INTO app.active_model
+                    (singleton,mlflow_run_id,registered_model,model_version) VALUES(true,%s,%s,%s)
+                    ON CONFLICT(singleton) DO UPDATE SET
+                        mlflow_run_id=excluded.mlflow_run_id,
+                        registered_model=excluded.registered_model,
+                        model_version=excluded.model_version,
+                        activated_at=now()
+                    WHERE (app.active_model.mlflow_run_id,app.active_model.registered_model,app.active_model.model_version)
+                        IS DISTINCT FROM (excluded.mlflow_run_id,excluded.registered_model,excluded.model_version)""",
+                    (info["mlflow_run_id"], MODEL_NAME, int(version.version)))
+            _cache.update(model_version=info["model_version"], model=loaded, info=info)
             metrics.LOADS.labels("success").inc()
-        return info, _cache["model"]
+        return _cache["info"], _cache["model"]
 
 
 @app.get("/health")
@@ -122,7 +152,10 @@ def predict(customer: Customer):
     features = customer.model_dump()
     probability = float(model.predict_proba(pd.DataFrame([features], columns=FEATURES))[0, 1])
     with connect() as conn, conn.cursor() as cur:
-        cur.execute("INSERT INTO app.predictions(mlflow_run_id,features,probability) VALUES(%s,%s::jsonb,%s)", (info["mlflow_run_id"], json.dumps(features), probability))
+        cur.execute("""INSERT INTO app.predictions
+            (mlflow_run_id,registered_model,model_version,features,probability)
+            VALUES(%s,%s,%s,%s::jsonb,%s)""",
+            (info["mlflow_run_id"], MODEL_NAME, int(info["model_version"]), json.dumps(features), probability))
     metrics.PROBABILITY.observe(probability)
     metrics.PREDICTIONS.labels(str(int(probability >= 0.5))).inc()
     for feature, histogram in metrics.FEATURES.items():

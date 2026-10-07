@@ -24,6 +24,8 @@ def register_candidate(model_info):
     )
     if version is None:
         version = mlflow.register_model(model_info["model_uri"], MODEL_NAME)
+    if model_info.get("model_contract"):
+        client.set_model_version_tag(MODEL_NAME, version.version, "model_contract", model_info["model_contract"])
     try:
         client.get_model_version_by_alias(MODEL_NAME, PRODUCTION_ALIAS)
     except MlflowException as exc:

@@ -30,24 +30,37 @@ def initialize():
             );
             CREATE TABLE IF NOT EXISTS app.model_runs (
                 mlflow_run_id TEXT PRIMARY KEY,
-                airflow_run_id TEXT NOT NULL,
-                git_commit TEXT NOT NULL,
-                roc_auc DOUBLE PRECISION NOT NULL,
+                airflow_run_id TEXT,
+                git_commit TEXT,
+                roc_auc DOUBLE PRECISION,
                 model_uri TEXT NOT NULL,
+                training_source TEXT NOT NULL DEFAULT 'airflow',
                 created_at TIMESTAMPTZ NOT NULL DEFAULT now()
             );
             CREATE TABLE IF NOT EXISTS app.active_model (
                 singleton BOOLEAN PRIMARY KEY DEFAULT true CHECK (singleton),
                 mlflow_run_id TEXT NOT NULL REFERENCES app.model_runs(mlflow_run_id),
+                registered_model TEXT,
+                model_version INTEGER,
                 activated_at TIMESTAMPTZ NOT NULL DEFAULT now()
             );
             CREATE TABLE IF NOT EXISTS app.predictions (
                 id BIGSERIAL PRIMARY KEY,
                 mlflow_run_id TEXT NOT NULL REFERENCES app.model_runs(mlflow_run_id),
+                registered_model TEXT,
+                model_version INTEGER,
                 features JSONB NOT NULL,
                 probability DOUBLE PRECISION NOT NULL,
                 created_at TIMESTAMPTZ NOT NULL DEFAULT now()
             );
+            ALTER TABLE app.model_runs ALTER COLUMN airflow_run_id DROP NOT NULL;
+            ALTER TABLE app.model_runs ALTER COLUMN git_commit DROP NOT NULL;
+            ALTER TABLE app.model_runs ALTER COLUMN roc_auc DROP NOT NULL;
+            ALTER TABLE app.model_runs ADD COLUMN IF NOT EXISTS training_source TEXT NOT NULL DEFAULT 'airflow';
+            ALTER TABLE app.active_model ADD COLUMN IF NOT EXISTS registered_model TEXT;
+            ALTER TABLE app.active_model ADD COLUMN IF NOT EXISTS model_version INTEGER;
+            ALTER TABLE app.predictions ADD COLUMN IF NOT EXISTS registered_model TEXT;
+            ALTER TABLE app.predictions ADD COLUMN IF NOT EXISTS model_version INTEGER;
         """)
 
 
@@ -90,7 +103,8 @@ def train(airflow_run_id):
     model = RandomForestClassifier(**config, n_jobs=1)
     mlflow.set_experiment(os.environ.get("MLFLOW_EXPERIMENT_NAME", "churn-online-demo"))
     with mlflow.start_run(run_name=airflow_run_id) as run:
-        mlflow.set_tags({"git_commit": commit, "git_dirty": str(dirty).lower(), "airflow_run_id": airflow_run_id, "dataset_version": "synthetic-v1"})
+        mlflow.set_tags({"git_commit": commit, "git_dirty": str(dirty).lower(), "airflow_run_id": airflow_run_id,
+                         "dataset_version": "synthetic-v1", "model_contract": "churn-v1"})
         mlflow.log_params(config | {"train_rows": len(x_train), "test_rows": len(x_test)})
         mlflow.log_dict(config, "model_config.json")
         mlflow.log_artifact(str(ROOT / "src" / "pipeline.py"), artifact_path="source")
@@ -99,7 +113,8 @@ def train(airflow_run_id):
         auc = float(roc_auc_score(y_test, probabilities))
         mlflow.log_metrics({"roc_auc": auc, "accuracy": float(accuracy_score(y_test, probabilities >= 0.5))})
         logged = mlflow.sklearn.log_model(model, name="model", input_example=x_test.head(2), signature=infer_signature(x_test, model.predict(x_test)))
-        result = {"mlflow_run_id": run.info.run_id, "airflow_run_id": airflow_run_id, "git_commit": commit, "roc_auc": auc, "model_uri": logged.model_uri}
+        result = {"mlflow_run_id": run.info.run_id, "airflow_run_id": airflow_run_id, "git_commit": commit,
+                  "roc_auc": auc, "model_uri": logged.model_uri, "model_contract": "churn-v1"}
         logging.info("MLflow result: %s", result)
         return result
 

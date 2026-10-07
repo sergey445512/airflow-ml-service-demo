@@ -50,6 +50,7 @@ jobs:
           docker run --rm --entrypoint python "$SERVICE_IMAGE" -m pip check
           docker run --rm --entrypoint python "$SERVICE_IMAGE" scripts/test_metrics.py
           docker run --rm --entrypoint python "$SERVICE_IMAGE" scripts/test_model_registry.py
+          docker run --rm --entrypoint python "$SERVICE_IMAGE" scripts/test_external_model.py
       - name: Start isolated stack
         run: docker compose -p ml-ci -f compose.yaml -f compose.release.yaml up -d --no-build --wait --wait-timeout 240
       - name: Verify DAGs, retry, recovery and real inference
@@ -60,6 +61,10 @@ jobs:
           docker compose -p ml-ci exec -T inference python scripts/smoke_release.py --revision "$GITHUB_SHA"
       - name: Verify production alias in MLflow
         run: docker compose -p ml-ci exec -T inference python scripts/verify_registry.py
+      - name: Verify independently trained model promotion and rollback
+        run: |
+          docker compose -p ml-ci -f compose.yaml -f compose.release.yaml run --rm --no-deps --entrypoint python inference scripts/train_external_model.py
+          docker compose -p ml-ci exec -T inference python scripts/verify_external_model.py
       - name: Verify Prometheus and Grafana
         run: |
           docker compose -p ml-ci exec -T airflow python scripts/verify_monitoring.py

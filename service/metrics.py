@@ -67,11 +67,12 @@ class ModelCollector:
         yield runs
         if row:
             info = GaugeMetricFamily("demo_active_model_info", "Published model identity", labels=["run_id", "git_commit"])
-            info.add_metric([row[0], row[1]], 1)
+            info.add_metric([row[0], row[1] or "unknown"], 1)
             yield info
-            auc = GaugeMetricFamily("demo_model_validation_roc_auc", "Offline validation ROC AUC; NOT live quality")
-            auc.add_metric([], float(row[2]))
-            yield auc
+            if row[2] is not None:
+                auc = GaugeMetricFamily("demo_model_validation_roc_auc", "Offline validation ROC AUC; NOT live quality")
+                auc.add_metric([], float(row[2]))
+                yield auc
             activated = GaugeMetricFamily("demo_model_activated_timestamp_seconds", "Publication time")
             activated.add_metric([], float(row[3]))
             yield activated
