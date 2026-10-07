@@ -6,10 +6,12 @@ import socket
 import threading
 import time
 from concurrent.futures import ThreadPoolExecutor
+from contextlib import closing
 from datetime import datetime, timezone
 from pathlib import Path
 
 import requests
+import psycopg2
 from fastapi import FastAPI, HTTPException
 from fastapi.responses import FileResponse
 
@@ -42,6 +44,8 @@ _ci = None
 _previous = {}
 _last_request_seen = 0.0
 _last_model_change = 0.0
+_last_prediction_seen = 0.0
+_last_prometheus_seen = 0.0
 
 
 def stamp():
@@ -161,6 +165,51 @@ def request_stats():
         return {"total": None, "neighbors": None, "qdrant": None}
 
 
+def latest_prediction():
+    """Observe a committed prediction without coupling inference to the map."""
+    try:
+        with closing(psycopg2.connect(os.environ["MAP_DATABASE_URL"], connect_timeout=2,
+                                      options="-c default_transaction_read_only=on")) as connection:
+            with connection.cursor() as cursor:
+                cursor.execute("""SELECT id, features, probability, model_version, created_at
+                    FROM app.predictions ORDER BY id DESC LIMIT 1""")
+                row = cursor.fetchone()
+        if row is None:
+            return {"status": "empty"}
+        row_id, features, probability, version, created_at = row
+        return {"status": "ready", "id": row_id, "features": features,
+                "probability": round(float(probability), 4), "prediction": int(probability >= .5),
+                "model_version": version, "created_at": created_at.isoformat()}
+    except (KeyError, psycopg2.Error) as exc:
+        return {"status": "unavailable", "reason": type(exc).__name__}
+
+
+def prometheus_state():
+    """Read Prometheus' own scrape status and aggregate, not inference's local copy."""
+    def value(session, expression):
+        response = session.get("http://prometheus:9090/api/v1/query",
+                               params={"query": expression}, timeout=2)
+        response.raise_for_status()
+        result = response.json()["data"]["result"]
+        return float(result[0]["value"][1]) if result else None
+
+    try:
+        with requests.Session() as session:
+            response = session.get("http://prometheus:9090/api/v1/targets",
+                                   params={"state": "active"}, timeout=2)
+            response.raise_for_status()
+            targets = response.json()["data"]["activeTargets"]
+            target = next(item for item in targets if item.get("labels", {}).get("job") == "inference")
+            total = value(session, "sum(demo_predict_requests_total)")
+            rate = value(session, "sum(rate(demo_predict_requests_total[1m]))")
+        return {"status": "ready", "scrape_health": target.get("health"),
+                "last_scrape": target.get("lastScrape"),
+                "requests_total": int(total) if total is not None else None,
+                "rate_1m": round(rate, 2) if rate is not None else None}
+    except (StopIteration, KeyError, ValueError, requests.RequestException) as exc:
+        return {"status": "unavailable", "reason": type(exc).__name__}
+
+
 def counter_rate(current, previous, elapsed):
     """A new container resets process-local Prometheus counters to zero."""
     if current is None or previous is None:
@@ -176,7 +225,7 @@ def health():
 
 @app.get("/api/state")
 def state(dag_id: str | None = None):
-    global _previous, _last_request_seen, _last_model_change
+    global _previous, _last_request_seen, _last_model_change, _last_prediction_seen, _last_prometheus_seen
     if dag_id and dag_id not in DEMO_DAGS:
         raise HTTPException(400, "Unknown demo DAG")
     with ThreadPoolExecutor(max_workers=14) as pool:
@@ -184,10 +233,14 @@ def state(dag_id: str | None = None):
         dag_future = pool.submit(dag_state, dag_id)
         model_future = pool.submit(model_state)
         metrics_future = pool.submit(request_stats)
+        prediction_future = pool.submit(latest_prediction)
+        prometheus_future = pool.submit(prometheus_state)
         services = service_future.result()
         dag = dag_future.result()
         model = model_future.result()
         metrics = metrics_future.result()
+        prediction = prediction_future.result()
+        prometheus = prometheus_future.result()
     with _lock:
         ci = dict(_ci) if _ci else None
         previous = dict(_previous)
@@ -224,15 +277,25 @@ def state(dag_id: str | None = None):
                                    and metrics["neighbors"] > previous["neighbors"])
     metrics["qdrant_active"] = (metrics["qdrant"] is not None and previous.get("qdrant") is not None
                                  and metrics["qdrant"] > previous["qdrant"])
+    if (prediction.get("id") and previous.get("prediction_id") is not None
+            and prediction["id"] != previous["prediction_id"]):
+        _last_prediction_seen = time.time()
+    if (prometheus.get("last_scrape") and previous.get("prometheus_scrape") is not None
+            and prometheus["last_scrape"] != previous["prometheus_scrape"]):
+        _last_prometheus_seen = time.time()
     with _lock:
         _previous = {"dag_id": dag.get("dag_id"), "dag_run": dag.get("run_id"),
                      "dag_runs": {run["dag_id"]: run for run in dag.get("dag_runs", [])},
                      "tasks": {task["id"]: task["status"] for task in dag.get("tasks", [])},
                      "model_version": model.get("model_version"), "requests": metrics["total"],
-                     "neighbors": metrics["neighbors"], "qdrant": metrics["qdrant"], "sample_at": time.time()}
+                     "neighbors": metrics["neighbors"], "qdrant": metrics["qdrant"],
+                     "prediction_id": prediction.get("id"),
+                     "prometheus_scrape": prometheus.get("last_scrape"), "sample_at": time.time()}
         events = list(_events[:14])
     return {"time": stamp(), "services": services, "dag": dag, "model": model,
             "requests": metrics, "model_change_recent": time.time() - _last_model_change < 20,
+            "prediction": prediction, "prediction_recent": time.time() - _last_prediction_seen < 6,
+            "prometheus": prometheus, "prometheus_recent": time.time() - _last_prometheus_seen < 7,
             "ci": ci, "events": events}
 
 

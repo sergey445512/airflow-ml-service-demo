@@ -24,6 +24,8 @@ x-s3-env: &s3-env
 services:
   architecture-map:
     image: ${MAP_IMAGE:-ml-airflow-demo:map}
+    environment:
+      MAP_DATABASE_URL: postgresql://demo:demo_local@postgres:5432/demo
     build:
       context: .
       dockerfile: Dockerfile.map

@@ -23,7 +23,9 @@ class CounterRateTest(unittest.TestCase):
         with patch.object(observer, "probe", side_effect=lambda item: (item[0], {"status": "up", "url": item[1][1]})), \
              patch.object(observer, "dag_state", return_value={"status": "no_runs", "tasks": []}), \
              patch.object(observer, "model_state", return_value={"status": "unavailable"}), \
-             patch.object(observer, "request_stats", return_value=metrics):
+             patch.object(observer, "request_stats", return_value=metrics), \
+             patch.object(observer, "latest_prediction", return_value={"status": "empty"}), \
+             patch.object(observer, "prometheus_state", return_value={"status": "unavailable"}):
             result = observer.state()
         self.assertEqual(result["requests"]["total"], 2)
         self.assertEqual(result["services"]["inference"]["status"], "up")
