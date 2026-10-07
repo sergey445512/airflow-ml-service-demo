@@ -27,6 +27,9 @@ SERVICES = {
     "qdrant": ("http://qdrant:6333/healthz", "http://localhost:6333/dashboard"),
     "prometheus": ("http://prometheus:9090/-/ready", "http://localhost:9090"),
     "grafana": ("http://grafana:3000/api/health", "http://localhost:3000"),
+    "database-ui": ("http://database-ui:8080", "http://localhost:8081"),
+    "redisinsight": ("http://redisinsight:5540", "http://localhost:5540"),
+    "architecture-map": ("http://localhost:8090/health", "http://localhost:8090"),
     "traffic": (None, "http://localhost:8000"),
     "github": (None, "https://github.com/sergey445512/airflow-ml-service-demo/actions"),
 }

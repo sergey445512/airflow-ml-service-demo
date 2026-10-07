@@ -62,8 +62,10 @@ jobs:
       - name: Verify live architecture map
         run: |
           python - <<'PY'
-          import requests
-          state = requests.get('http://localhost:8090/api/state', timeout=30).json()
+          import json
+          import urllib.request
+          with urllib.request.urlopen('http://localhost:8090/api/state', timeout=30) as response:
+              state = json.load(response)
           assert state['services']['airflow']['status'] == 'up', state
           assert state['services']['inference']['status'] == 'up', state
           assert state['dag']['tasks'], state
