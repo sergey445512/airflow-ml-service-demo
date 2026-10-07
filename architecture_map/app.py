@@ -43,6 +43,7 @@ _events = []
 _ci = None
 _previous = {}
 _last_request_seen = 0.0
+_last_response_seen = 0.0
 _last_model_change = 0.0
 _last_prediction_seen = 0.0
 _last_prometheus_seen = 0.0
@@ -156,13 +157,16 @@ def request_stats():
         metrics.raise_for_status()
         total = sum(float(value) for value in re.findall(
             r'^demo_predict_requests_total\{[^\n]*\}\s+([0-9.eE+-]+)', metrics.text, re.M))
+        successful = sum(float(value) for value in re.findall(
+            r'^demo_predict_requests_total\{status="200"\}\s+([0-9.eE+-]+)', metrics.text, re.M))
         def counter(name):
             return sum(float(value) for value in re.findall(
                 rf'^{name}\{{[^\n]*\}}\s+([0-9.eE+-]+)', metrics.text, re.M))
-        return {"total": int(total), "neighbors": int(counter("demo_neighbor_cache_lookups_total")),
+        return {"total": int(total), "success_total": int(successful),
+                "neighbors": int(counter("demo_neighbor_cache_lookups_total")),
                 "qdrant": int(counter("demo_qdrant_queries_total"))}
     except requests.RequestException:
-        return {"total": None, "neighbors": None, "qdrant": None}
+        return {"total": None, "success_total": None, "neighbors": None, "qdrant": None}
 
 
 def latest_prediction():
@@ -225,7 +229,7 @@ def health():
 
 @app.get("/api/state")
 def state(dag_id: str | None = None):
-    global _previous, _last_request_seen, _last_model_change, _last_prediction_seen, _last_prometheus_seen
+    global _previous, _last_request_seen, _last_response_seen, _last_model_change, _last_prediction_seen, _last_prometheus_seen
     if dag_id and dag_id not in DEMO_DAGS:
         raise HTTPException(400, "Unknown demo DAG")
     with ThreadPoolExecutor(max_workers=14) as pool:
@@ -253,6 +257,9 @@ def state(dag_id: str | None = None):
     previous_total = previous.get("requests")
     if metrics["total"] is not None and metrics["total"] > 0 and metrics["total"] != previous_total:
         _last_request_seen = time.time()
+    if (metrics["success_total"] is not None and previous.get("success_total") is not None
+            and metrics["success_total"] != previous["success_total"]):
+        _last_response_seen = time.time()
     services["traffic"]["status"] = "up" if time.time() - _last_request_seen < 15 else "unknown"
     previous_runs = previous.get("dag_runs")
     if previous_runs is not None:
@@ -288,12 +295,14 @@ def state(dag_id: str | None = None):
                      "dag_runs": {run["dag_id"]: run for run in dag.get("dag_runs", [])},
                      "tasks": {task["id"]: task["status"] for task in dag.get("tasks", [])},
                      "model_version": model.get("model_version"), "requests": metrics["total"],
+                     "success_total": metrics["success_total"],
                      "neighbors": metrics["neighbors"], "qdrant": metrics["qdrant"],
                      "prediction_id": prediction.get("id"),
                      "prometheus_scrape": prometheus.get("last_scrape"), "sample_at": time.time()}
         events = list(_events[:14])
     return {"time": stamp(), "services": services, "dag": dag, "model": model,
             "requests": metrics, "model_change_recent": time.time() - _last_model_change < 20,
+            "response_recent": time.time() - _last_response_seen < 6,
             "prediction": prediction, "prediction_recent": time.time() - _last_prediction_seen < 6,
             "prometheus": prometheus, "prometheus_recent": time.time() - _last_prometheus_seen < 7,
             "ci": ci, "events": events}

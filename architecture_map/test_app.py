@@ -7,6 +7,15 @@ counter_rate = observer.counter_rate
 
 
 class CounterRateTest(unittest.TestCase):
+    def test_successful_response_counter_is_separate_from_all_requests(self):
+        response = MagicMock()
+        response.text = ('demo_predict_requests_total{status="200"} 7\n'
+                         'demo_predict_requests_total{status="422"} 2\n')
+        with patch.object(observer.requests, "get", return_value=response):
+            result = observer.request_stats()
+        self.assertEqual(result["total"], 9)
+        self.assertEqual(result["success_total"], 7)
+
     def test_normal_increment(self):
         self.assertEqual(counter_rate(104, 100, 4), 1.0)
 
@@ -19,7 +28,7 @@ class CounterRateTest(unittest.TestCase):
 
     def test_state_recovers_after_temporary_metrics_outage(self):
         observer._previous = {"requests": None, "sample_at": 0}
-        metrics = {"total": 2, "neighbors": 0, "qdrant": 0}
+        metrics = {"total": 2, "success_total": 1, "neighbors": 0, "qdrant": 0}
         with patch.object(observer, "probe", side_effect=lambda item: (item[0], {"status": "up", "url": item[1][1]})), \
              patch.object(observer, "dag_state", return_value={"status": "no_runs", "tasks": []}), \
              patch.object(observer, "model_state", return_value={"status": "unavailable"}), \
