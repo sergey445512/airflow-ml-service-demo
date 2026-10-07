@@ -126,6 +126,14 @@ def request_stats():
         return {"total": None, "neighbors": None, "qdrant": None}
 
 
+def counter_rate(current, previous, elapsed):
+    """A new container resets process-local Prometheus counters to zero."""
+    if current is None or previous is None:
+        return None
+    delta = current - previous if current >= previous else current
+    return round(delta / max(elapsed, 0.01), 2)
+
+
 @app.get("/health")
 def health():
     return {"status": "ok"}
@@ -152,7 +160,8 @@ def state():
         ci.pop("received_unix", None)
     else:
         ci = {"status": "unavailable", "reason": "Локальный наблюдатель GitHub Actions не запущен"}
-    if metrics["total"] is not None and metrics["total"] > previous.get("requests", -1):
+    previous_total = previous.get("requests")
+    if metrics["total"] is not None and metrics["total"] > 0 and metrics["total"] != previous_total:
         _last_request_seen = time.time()
     services["traffic"]["status"] = "up" if time.time() - _last_request_seen < 15 else "unknown"
     if dag.get("run_id") != previous.get("dag_run") and dag.get("run_id"):
@@ -168,11 +177,8 @@ def state():
         for task in dag.get("tasks", []):
             if old_tasks.get(task["id"]) != task["status"] and task["status"] in {"running", "success", "failed"}:
                 record("task", task["id"] + ": " + task["status"], dag["run_id"])
-    if metrics["total"] is not None and previous.get("requests") is not None:
-        elapsed = max(time.time() - previous.get("sample_at", time.time()), 0.01)
-        metrics["rate"] = round(max(0, metrics["total"] - previous["requests"]) / elapsed, 2)
-    else:
-        metrics["rate"] = None
+    elapsed = time.time() - previous.get("sample_at", time.time())
+    metrics["rate"] = counter_rate(metrics["total"], previous_total, elapsed)
     metrics["neighbors_active"] = (metrics["neighbors"] is not None and previous.get("neighbors") is not None
                                    and metrics["neighbors"] > previous["neighbors"])
     metrics["qdrant_active"] = (metrics["qdrant"] is not None and previous.get("qdrant") is not None
