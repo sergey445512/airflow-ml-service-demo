@@ -162,11 +162,20 @@ def request_stats():
         def counter(name):
             return sum(float(value) for value in re.findall(
                 rf'^{name}\{{[^\n]*\}}\s+([0-9.eE+-]+)', metrics.text, re.M))
+        def labeled(name, label, value):
+            return sum(float(sample) for sample in re.findall(
+                rf'^{name}\{{{label}="{value}"\}}\s+([0-9.eE+-]+)', metrics.text, re.M))
         return {"total": int(total), "success_total": int(successful),
                 "neighbors": int(counter("demo_neighbor_cache_lookups_total")),
-                "qdrant": int(counter("demo_qdrant_queries_total"))}
+                "neighbor_hit": int(labeled("demo_neighbor_cache_lookups_total", "result", "hit")),
+                "neighbor_miss": int(labeled("demo_neighbor_cache_lookups_total", "result", "miss")),
+                "neighbor_unavailable": int(labeled("demo_neighbor_cache_lookups_total", "result", "unavailable")),
+                "qdrant": int(counter("demo_qdrant_queries_total")),
+                "qdrant_success": int(labeled("demo_qdrant_queries_total", "result", "success"))}
     except requests.RequestException:
-        return {"total": None, "success_total": None, "neighbors": None, "qdrant": None}
+        return {"total": None, "success_total": None, "neighbors": None,
+                "neighbor_hit": None, "neighbor_miss": None, "neighbor_unavailable": None,
+                "qdrant": None, "qdrant_success": None}
 
 
 def latest_prediction():

@@ -4,7 +4,8 @@
 :root{color-scheme:dark;--bg:#080e18;--panel:#101b2b;--line:#294058;--text:#e9f2fa;--muted:#8ba2b6;--cyan:#5ce3e6;--green:#77dfaa;--orange:#ffba75;--red:#ff778c}
 *{box-sizing:border-box}body{margin:0;background:radial-gradient(circle at 48% -10%,#16364c 0,#080e18 43%);color:var(--text);font:14px/1.45 Inter,Segoe UI,Arial,sans-serif}a{color:inherit;text-decoration:none}button{cursor:pointer;font:inherit}header{padding:27px 36px 20px;border-bottom:1px solid #203044;display:flex;gap:24px;align-items:flex-end;justify-content:space-between}h1{font-size:29px;letter-spacing:-.04em;margin:0 0 4px;font-weight:750}header p{color:var(--muted);margin:0}.eyebrow{color:var(--cyan);font-size:11px;font-weight:800;letter-spacing:.17em;text-transform:uppercase}.toolbar{display:flex;align-items:center;gap:14px}.pill{background:#12283a;border:1px solid #2e5063;border-radius:99px;padding:8px 12px;color:var(--cyan);white-space:nowrap}.button{border:1px solid #6bbbd0;background:linear-gradient(135deg,#71d8e2,#8de4c3);color:#082027;border-radius:10px;padding:10px 16px;font-weight:800;white-space:nowrap}.button:disabled{opacity:.55;cursor:wait}main{padding:24px 36px 50px;max-width:1720px;margin:auto}.intro{display:flex;align-items:center;justify-content:space-between;gap:20px;margin-bottom:20px;color:var(--muted)}.legend{display:flex;gap:16px;white-space:nowrap;font-size:12px}.legend span:before{content:"";display:inline-block;width:8px;height:8px;border-radius:50%;margin-right:6px;background:var(--green)}.legend span:nth-child(2):before{background:var(--orange)}.legend span:nth-child(3):before{background:var(--red)}.layout{display:grid;grid-template-columns:minmax(0,1fr) 315px;gap:18px}.board,.panel{background:linear-gradient(145deg,#111e2e,#0d1725);border:1px solid #2a3c50;border-radius:16px;box-shadow:0 18px 48px #02070d66}.board{overflow-x:auto;padding:22px}.board-title{font-size:11px;letter-spacing:.17em;color:#86a4b8;text-transform:uppercase;margin:0 0 12px;font-weight:800}.canvas{position:relative;width:1100px;height:710px;background-image:linear-gradient(#ffffff06 1px,transparent 1px),linear-gradient(90deg,#ffffff06 1px,transparent 1px);background-size:26px 26px;border-radius:10px;overflow:hidden}.lane{position:absolute;left:10px;right:10px;height:197px;border:1px solid #ffffff10;background:#08142165;border-radius:12px}.lane h2{position:absolute;top:10px;left:17px;font-size:11px;color:#8faabd;letter-spacing:.16em;text-transform:uppercase;margin:0}.lane small{position:absolute;top:10px;right:16px;color:#617f97;font-size:11px}.node{position:absolute;width:150px;height:92px;padding:12px 13px;background:#152638;border:1px solid #345168;border-radius:11px;z-index:2;box-shadow:0 10px 28px #050b12a8;transition:border-color .2s,transform .2s}.node:hover{border-color:#69c6d6;transform:translateY(-2px)}.node .top{display:flex;justify-content:space-between;align-items:center;color:#91aabd;font-size:11px}.node strong{display:block;font-size:16px;margin:7px 0 2px;line-height:1}.node small{color:#8ca5ba;display:block;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.dot{width:8px;height:8px;border-radius:50%;background:#8b97a6;box-shadow:0 0 0 3px #8b97a622}.dot.up{background:var(--green);box-shadow:0 0 0 3px #77dfaa22,0 0 12px #77dfaa}.dot.down{background:var(--red);box-shadow:0 0 0 3px #ff778c22}.dot.unknown{background:var(--orange)}.node.active{border-color:#54c9dc;box-shadow:0 0 0 1px #54c9dc50,0 0 25px #2aafe43a}.flows{position:absolute;inset:0;z-index:1;pointer-events:none}.flows path{fill:none;stroke:#49627b;stroke-width:2;stroke-dasharray:5 7}.flows path.live{stroke:#58cfdd;stroke-dasharray:8 6;animation:flow .7s linear infinite;filter:drop-shadow(0 0 4px #3edced)}.flows path.model-flow{stroke:#8cbd88}.flows path.deploy-flow{stroke:#f2a86e}@keyframes flow{to{stroke-dashoffset:-14}}.badge{position:absolute;z-index:3;font-size:10px;color:#9ab8ca;background:#0e2030;border:1px solid #31485f;border-radius:5px;padding:3px 7px}.panel{padding:18px;margin-bottom:18px}.panel h2{font-size:14px;margin:0 0 13px}.section-label{font-size:11px;letter-spacing:.1em;color:#7693a9;text-transform:uppercase}.big{font-size:24px;font-weight:750;line-height:1.1;margin-top:4px}.muted{color:var(--muted)}.mono{font-family:Consolas,monospace}.divider{height:1px;background:#263c50;margin:16px 0}.tasks{display:flex;gap:5px;margin-top:14px}.task{height:7px;flex:1;background:#354559;border-radius:10px}.task.success{background:var(--green)}.task.running{background:var(--cyan);box-shadow:0 0 10px var(--cyan);animation:pulse 1.2s ease-in-out infinite}.task.failed{background:var(--red)}@keyframes pulse{50%{opacity:.4}}.task-list{display:grid;gap:7px;margin-top:13px}.task-row{display:flex;justify-content:space-between;gap:6px;color:#aac0d1;font-size:12px}.task-row span:last-child{color:#d0e1ec}.event{padding:10px 0;border-bottom:1px solid #23364a}.event:last-child{border:0}.event time{color:#7390a6;font-size:11px}.event strong{display:block;font-size:12px;margin:2px 0}.event small{color:#8ba5b8}.side{min-width:0}.side .panel{overflow:hidden}.stat-row{display:flex;justify-content:space-between;margin:9px 0;gap:8px}.stat-row span:last-child{text-align:right;overflow:hidden;text-overflow:ellipsis}.status-text{color:var(--green)}.status-text.warn{color:var(--orange)}.status-text.bad{color:var(--red)}.link{color:var(--cyan);font-size:12px}.hint{font-size:11px;color:#7791a4;margin-top:14px}footer{color:#6e8ca2;margin-top:16px;font-size:12px}@media(max-width:1100px){.layout{grid-template-columns:1fr}.side{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:18px}.side .panel{margin:0}}@media(max-width:650px){header{padding:20px;align-items:flex-start;flex-direction:column}main{padding:20px}.intro{flex-direction:column;align-items:start}.legend{flex-wrap:wrap}}
 .dag-picker{display:grid;gap:7px;margin-top:11px}.dag-choice{width:100%;background:#122438;color:#a9c0d0;border:1px solid #30485e;border-radius:8px;padding:7px 9px;text-align:left;display:flex;justify-content:space-between;gap:6px;font-size:11px}.dag-choice:hover,.dag-choice.selected{border-color:#5bc7d6;color:#e5f8fb}.dag-choice span:last-child{white-space:nowrap}
-.flows{pointer-events:auto}.flows path{pointer-events:none;stroke-width:2}.flows path.hit{pointer-events:stroke;cursor:pointer;stroke:transparent;stroke-width:24;stroke-dasharray:none;animation:none;filter:none}.flow-caption{position:absolute;z-index:3;border:1px solid #38556d;background:#102438;color:#a9bfd0;border-radius:6px;padding:3px 7px;font-size:10px;line-height:1.2;white-space:nowrap;cursor:pointer}.flow-caption.live{color:#e8ffff;border-color:#5ce3e6;box-shadow:0 0 12px #38cbd54d}.flow-caption.selected{outline:2px solid #a9f4ef;outline-offset:2px}.flow-caption.live.forward{animation:caption-forward 3s ease-in-out infinite alternate}.flow-caption.live.backward{animation:caption-backward 3s ease-in-out infinite alternate}@keyframes caption-forward{to{transform:translateX(70px)}}@keyframes caption-backward{to{transform:translateX(-70px)}}.flow-picker{width:100%;background:#122438;color:#e5f8fb;border:1px solid #406176;border-radius:8px;padding:9px;margin:8px 0}.flow-detail{font-size:12px;color:#b5cad8;line-height:1.5}.flow-detail strong{color:#e9f2fa}.flow-detail code{color:#8de4df;word-break:break-word}.flow-pulse{color:var(--cyan);font-size:11px;margin-top:8px}
+.flows path.live.selected{stroke:#58cfdd;stroke-width:3}
+.flows{pointer-events:auto}.flows path{pointer-events:none;stroke-width:2}.flows path.selected{stroke:#95bed0;stroke-width:3}.flows path.hit{pointer-events:stroke;cursor:pointer;stroke:transparent;stroke-width:24;stroke-dasharray:none;animation:none;filter:none}.flow-packet{pointer-events:none}.flow-packet rect{fill:#102d3d;stroke:#6fe7e6;stroke-width:1.5;filter:drop-shadow(0 0 6px #46d2dc99)}.flow-packet text{fill:#f1ffff;font:11px Segoe UI,Arial,sans-serif;font-weight:700}.flow-picker{width:100%;background:#122438;color:#e5f8fb;border:1px solid #406176;border-radius:8px;padding:9px;margin:8px 0}.flow-detail{font-size:12px;color:#b5cad8;line-height:1.5}.flow-detail strong{color:#e9f2fa}.flow-detail code{color:#8de4df;word-break:break-word}.flow-pulse{color:var(--cyan);font-size:11px;margin-top:8px}
 </style></head><body>
 <header><div><div class="eyebrow">ML platform / observability</div><h1>Живая карта платформы</h1><p>Сервисы, поток запросов, обучение модели и выкладка кода — в одном месте.</p></div><div class="toolbar"><span class="pill" id="updated">Подключение…</span><button class="button" id="trigger">▶ Запустить демо DAG</button></div></header>
 <main><div class="intro"><div>Данные обновляются каждые 3 секунды. Нажмите на сервис, чтобы открыть его интерфейс.</div><div class="legend"><span>Доступен</span><span>Нет данных</span><span>Недоступен</span></div></div><div class="layout"><div class="board"><div class="board-title">Архитектура и реальные потоки</div><div class="canvas">
@@ -14,13 +15,11 @@
 <svg class="flows" viewBox="0 0 1100 710" preserveAspectRatio="none">
 <path id="e-air-pg" d="M225 103 H327"/><path id="e-pg-ml" d="M478 103 H557"/><path id="e-ml-s3" d="M710 103 H802"/><path id="e-ml-inf" class="model-flow" d="M710 150 H741 V530 H710"/>
 <path id="e-gh-build" class="deploy-flow" d="M235 315 H388"/><path id="e-build-inf" class="deploy-flow" d="M463 365 V445 H635 V485"/>
-<path id="e-traffic-inf" d="M225 516 H557"/><path id="e-inf-traffic" d="M557 553 H225"/><path id="e-inf-pg" d="M634 480 V163 H402"/><path id="e-inf-redis" d="M710 527 H803"/><path id="e-inf-qdrant" d="M710 550 H742 V600 H803"/><path id="e-prom-inf" d="M613 603 V577"/><path id="e-inf-prom" d="M660 577 V603"/><path id="e-prom-graf" d="M803 649 H710"/>
+<path id="e-traffic-inf" d="M225 516 H557"/><path id="e-inf-traffic" d="M557 553 H225"/><path id="e-inf-pg" d="M634 480 V163 H402"/>
+<path id="e-inf-redis" d="M710 496 H803"/><path id="e-redis-inf" d="M803 519 H710"/><path id="e-inf-redis-write" d="M710 542 H803"/>
+<path id="e-inf-qdrant" d="M710 550 H742 V600 H803"/><path id="e-qdrant-inf" d="M803 625 H751 V565 H710"/>
+<path id="e-prom-inf" d="M613 603 V577"/><path id="e-inf-prom" d="M660 577 V603"/><path id="e-prom-graf" d="M803 649 H710"/>
 </svg>
-<button type="button" class="flow-caption forward" data-flow="e-traffic-inf" style="left:295px;top:486px">POST /predict · признаки</button>
-<button type="button" class="flow-caption backward" data-flow="e-inf-traffic" id="caption-prediction" style="left:365px;top:559px">Ответ · вероятность оттока</button>
-<button type="button" class="flow-caption" data-flow="e-inf-pg" style="left:480px;top:191px">Запись · признаки + прогноз</button>
-<button type="button" class="flow-caption" data-flow="e-prom-inf" style="left:482px;top:581px">GET /metrics</button>
-<button type="button" class="flow-caption" data-flow="e-inf-prom" id="caption-metrics" style="left:684px;top:581px">Ответ · метрики</button>
 <a class="node" data-service="airflow" style="left:75px;top:61px"><div class="top">ORCHESTRATION <i class="dot"></i></div><strong>Airflow</strong><small id="node-dag">DAG status</small></a>
 <a class="node" data-service="postgres" style="left:327px;top:61px"><div class="top">DATABASE <i class="dot"></i></div><strong>Postgres</strong><small>данные и метаданные</small></a>
 <a class="node" data-service="mlflow" style="left:558px;top:61px"><div class="top">REGISTRY <i class="dot"></i></div><strong>MLflow</strong><small id="node-model">production alias</small></a>
@@ -28,29 +27,93 @@
 <a class="node" data-service="github" style="left:85px;top:273px"><div class="top">SOURCE CONTROL <i class="dot"></i></div><strong>GitHub</strong><small>push / pull request</small></a>
 <div class="node" id="build-node" style="left:389px;top:273px"><div class="top">CI / CD <i class="dot"></i></div><strong>Build & deploy</strong><small id="node-ci">ожидание статуса</small></div>
 <span class="badge" id="ci-stage-badge" style="left:583px;top:343px" hidden></span>
-<a class="node" data-service="traffic" style="left:75px;top:485px"><div class="top">REQUEST SOURCE <i class="dot"></i></div><strong>Трафик</strong><small id="node-traffic">backend / generator</small></a>
-<a class="node" data-service="inference" style="left:558px;top:485px"><div class="top">ONLINE API <i class="dot"></i></div><strong>Inference</strong><small id="node-release">running image</small></a>
+<a class="node" data-service="traffic" style="left:75px;top:485px"><div class="top">REQUEST SOURCE <i class="dot"></i></div><strong>Бэкенд</strong><small id="node-traffic">эмуляция: генератор</small></a>
+<a class="node" data-service="inference" style="left:558px;top:485px"><div class="top">ONLINE API <i class="dot"></i></div><strong>МЛ-сервис</strong><small id="node-release">running image</small></a>
 <a class="node" data-service="redis" style="left:803px;top:461px"><div class="top">CACHE <i class="dot"></i></div><strong>Redis</strong><small>похожие клиенты</small></a>
 <a class="node" data-service="qdrant" style="left:803px;top:555px"><div class="top">VECTOR STORE <i class="dot"></i></div><strong>Qdrant</strong><small>векторный поиск</small></a>
 <a class="node" data-service="prometheus" style="left:560px;top:603px"><div class="top">METRICS <i class="dot"></i></div><strong>Prometheus</strong><small>сбор метрик</small></a>
 <a class="node" data-service="grafana" style="left:803px;top:603px"><div class="top">DASHBOARDS <i class="dot"></i></div><strong>Grafana</strong><small>графики и панели</small></a>
 </div></div><div class="side">
 <div class="panel"><div class="section-label">Сейчас в production</div><div class="big" id="model-version">—</div><div class="stat-row"><span class="muted">Источник</span><span id="model-source">—</span></div><div class="stat-row"><span class="muted">Код сервиса</span><span class="mono" id="code-sha">—</span></div><div class="stat-row"><span class="muted">Запросы</span><span id="request-rate">—</span></div><div class="hint">Модель меняется через alias в MLflow. Изменение кода приходит отдельным релизом.</div></div>
-<div class="panel"><div class="section-label">Что проходит по линии</div><select class="flow-picker" id="flow-select" aria-label="Выберите связь на карте"></select><div class="flow-detail" id="flow-detail">—</div><div class="flow-pulse" id="flow-pulse"></div><div class="hint">Нажмите на траекторию или подпись. Подсветка показывает наблюдаемую активность; для части связей это стадия процесса, а не трассировка отдельного запроса.</div></div>
+<div class="panel"><div class="section-label">Что проходит по линии</div><select class="flow-picker" id="flow-select" aria-label="Выберите связь на карте"></select><div class="flow-detail" id="flow-detail">—</div><div class="flow-pulse" id="flow-pulse"></div><div class="hint">Нажмите на траекторию для подробностей. Анимация воспроизводит последний обнаруженный цикл по счётчикам; это не трассировка отдельного HTTP-запроса.</div></div>
 <div class="panel"><div class="section-label">Последний сохранённый прогноз</div><div id="prediction-detail" class="flow-detail">—</div><div class="divider"></div><div class="section-label">Prometheus · inference</div><div id="prometheus-detail" class="flow-detail">—</div></div>
 <div class="panel"><div class="section-label">Airflow / демо DAG</div><div class="big" id="dag-status">—</div><div class="mono muted" style="font-size:11px;margin-top:7px;word-break:break-all;white-space:pre-wrap" id="dag-run">—</div><div class="hint" id="dag-note"></div><div class="tasks" id="tasks-bar"></div><div class="task-list" id="tasks-list"></div><div class="divider"></div><div class="section-label">Запуски DAG</div><div class="dag-picker" id="dag-picker"></div><div class="divider"></div><a class="link" href="http://localhost:8080" target="_blank">Открыть Airflow ↗</a></div>
 <div class="panel"><div class="section-label">GitHub Actions / релиз</div><div class="big" id="ci-status">—</div><div class="task-list" id="jobs-list"></div><div class="divider"></div><a class="link" id="ci-link" href="https://github.com/sergey445512/airflow-ml-service-demo/actions" target="_blank">Открыть Actions ↗</a><div class="hint" id="ci-hint"></div></div>
 <div class="panel"><h2>Вспомогательные интерфейсы</h2><div class="task-list" id="extra-services"></div></div>
 <div class="panel"><h2>Что произошло</h2><div id="events"><span class="muted">Ожидание событий…</span></div></div>
-</div></div><footer>Карта показывает наблюдаемое состояние сервисов и контрольных точек. Линии отражают архитектурные связи, а подсветка — активность, полученную из Airflow, GitHub Actions и метрик inference.</footer></main>
+</div></div><footer>Карта показывает наблюдаемое состояние сервисов и контрольных точек. Линии отражают архитектурные связи, а подсветка — активность, полученную из Airflow, GitHub Actions и метрик МЛ-сервиса.</footer></main>
 <script>
-const $=id=>document.getElementById(id);let busy=false,selectedDag=null,selectedFlow='e-inf-pg';
-const flowLabels={'e-air-pg':'Airflow → Postgres','e-pg-ml':'Postgres → MLflow','e-ml-s3':'MLflow → S3','e-ml-inf':'MLflow → Inference','e-gh-build':'GitHub → CI','e-build-inf':'CI/CD → Inference','e-traffic-inf':'Backend → Inference · запрос','e-inf-traffic':'Inference → Backend · ответ','e-inf-pg':'Inference → Postgres','e-inf-redis':'Inference → Redis','e-inf-qdrant':'Inference → Qdrant','e-prom-inf':'Prometheus → Inference · запрос','e-inf-prom':'Inference → Prometheus · ответ','e-prom-graf':'Grafana → Prometheus'};
+const $=id=>document.getElementById(id);let busy=false,selectedDag=null,selectedFlow='e-inf-pg',lastState=null;
+let seenSuccess=null,seenPrediction=null,seenScrape=null,seenHit=null,seenMiss=null,seenUnavailable=null;
+let clientCycle=Promise.resolve(),prometheusCycle=Promise.resolve();
+const flowLabels={'e-air-pg':'Airflow → Postgres','e-pg-ml':'Postgres → MLflow','e-ml-s3':'MLflow → S3','e-ml-inf':'MLflow → МЛ-сервис','e-gh-build':'GitHub → CI','e-build-inf':'CI/CD → МЛ-сервис','e-traffic-inf':'Бэкенд → МЛ-сервис · запрос','e-inf-traffic':'МЛ-сервис → Бэкенд · ответ','e-inf-pg':'МЛ-сервис → Postgres','e-inf-redis':'МЛ-сервис → Redis · GET','e-redis-inf':'Redis → МЛ-сервис · hit/miss','e-inf-qdrant':'МЛ-сервис → Qdrant · поиск','e-qdrant-inf':'Qdrant → МЛ-сервис · результат','e-inf-redis-write':'МЛ-сервис → Redis · SETEX','e-prom-inf':'Prometheus → МЛ-сервис · запрос','e-inf-prom':'МЛ-сервис → Prometheus · ответ','e-prom-graf':'Grafana → Prometheus'};
 $('flow-select').innerHTML=Object.entries(flowLabels).map(([id,label])=>`<option value="${id}">${label}</option>`).join('');$('flow-select').value=selectedFlow;
 const flowSvg=document.querySelector('.flows');for(const line of [...flowSvg.querySelectorAll('path[id]')]){const hit=document.createElementNS('http://www.w3.org/2000/svg','path');hit.setAttribute('class','hit');hit.setAttribute('d',line.getAttribute('d'));hit.dataset.flow=line.id;flowSvg.appendChild(hit)}
 function statusClass(s){return s==='up'?'up':s==='down'?'down':'unknown'}
-function mark(id,on){const e=$(id);if(!e)return;e.classList.toggle('live',!!on);const caption=document.querySelector(`.flow-caption[data-flow="${id}"]`);if(caption)caption.classList.toggle('live',!!on)}
-function selectFlow(id){if(!flowLabels[id])return;selectedFlow=id;$('flow-select').value=id;document.querySelectorAll('.flow-caption').forEach(c=>c.classList.toggle('selected',c.dataset.flow===id));refresh()}
+function mark(id,on){const e=$(id);if(e)e.classList.toggle('live',!!on)}
+function selectFlow(id){if(!flowLabels[id])return;$(selectedFlow).classList.remove('selected');selectedFlow=id;$(id).classList.add('selected');$('flow-select').value=id;if(lastState)renderFlows(lastState)}
+$(selectedFlow).classList.add('selected');
+function updateFlowActivity(){
+ const live=id=>$(id).classList.contains('live');
+ const prediction=['e-traffic-inf','e-inf-pg','e-inf-traffic','e-inf-redis','e-redis-inf','e-inf-qdrant','e-qdrant-inf','e-inf-redis-write'].some(live);
+ const scraping=live('e-prom-inf')||live('e-inf-prom');
+ document.querySelector('[data-service="traffic"]').classList.toggle('active',live('e-traffic-inf')||live('e-inf-traffic'));
+ document.querySelector('[data-service="inference"]').classList.toggle('active',prediction||scraping);
+ document.querySelector('[data-service="postgres"]').classList.toggle('active',live('e-inf-pg'));
+ document.querySelector('[data-service="redis"]').classList.toggle('active',live('e-inf-redis')||live('e-redis-inf')||live('e-inf-redis-write'));
+ document.querySelector('[data-service="qdrant"]').classList.toggle('active',live('e-inf-qdrant')||live('e-qdrant-inf'));
+ document.querySelector('[data-service="prometheus"]').classList.toggle('active',scraping);
+ $('flow-pulse').textContent=live(selectedFlow)?'● Сейчас идёт обмен':'○ Сейчас обмена нет';
+}
+function playFlow(id,label,duration=850){
+ const line=$(id),packet=document.createElementNS('http://www.w3.org/2000/svg','g');
+ packet.setAttribute('class','flow-packet');packet.dataset.flow=id;
+ const rect=document.createElementNS('http://www.w3.org/2000/svg','rect');rect.setAttribute('y','-13');rect.setAttribute('height','25');rect.setAttribute('rx','6');
+ const textNode=document.createElementNS('http://www.w3.org/2000/svg','text');textNode.setAttribute('text-anchor','middle');textNode.setAttribute('y','4');textNode.textContent=label;
+ const motion=document.createElementNS('http://www.w3.org/2000/svg','animateMotion');motion.setAttribute('dur',duration+'ms');motion.setAttribute('repeatCount','1');motion.setAttribute('fill','freeze');motion.setAttribute('path',line.getAttribute('d'));
+ packet.append(rect,textNode,motion);flowSvg.appendChild(packet);
+ const width=Math.ceil(textNode.getComputedTextLength())+18;rect.setAttribute('x',String(-width/2));rect.setAttribute('width',String(width));
+ line.classList.add('live');updateFlowActivity();
+ return new Promise(resolve=>setTimeout(()=>{packet.remove();line.classList.remove('live');updateFlowActivity();resolve()},duration));
+}
+function queueNeighborCycle(kind){
+ clientCycle=clientCycle.then(async()=>{
+  await playFlow('e-traffic-inf','POST /neighbors · признаки',650);
+  await playFlow('e-inf-redis','GET · похожие клиенты',600);
+  if(kind!=='unavailable')await playFlow('e-redis-inf',kind==='miss'?'MISS · нет в кэше':'HIT · найдено',550);
+  if(kind!=='hit'){
+   await playFlow('e-inf-qdrant','Поиск похожих',650);
+   await playFlow('e-qdrant-inf','Результат поиска',650);
+   if(kind==='miss')await playFlow('e-inf-redis-write','SETEX · записать кэш',600);
+  }
+  await playFlow('e-inf-traffic','Ответ · похожие клиенты',650);
+ });
+}
+function observeCycles(s){
+ const success=s.requests.success_total,prediction=s.prediction?.id,scrape=s.prometheus?.last_scrape;
+ const hit=s.requests.neighbor_hit,miss=s.requests.neighbor_miss,unavailable=s.requests.neighbor_unavailable;
+ if(seenSuccess!==null&&success>seenSuccess){
+  const stored=prediction!=null&&seenPrediction!=null&&prediction>seenPrediction;
+  const probability=s.prediction?.status==='ready'?Number(s.prediction.probability).toFixed(4):null;
+  clientCycle=clientCycle.then(async()=>{
+   await playFlow('e-traffic-inf','POST /predict · признаки');
+   if(stored)await playFlow('e-inf-pg','Запись · признаки + прогноз',900);
+   await playFlow('e-inf-traffic',probability?'Ответ · P(оттока) '+probability:'Ответ · прогноз');
+  });
+ }
+ if(seenMiss!==null&&miss>seenMiss)queueNeighborCycle('miss');
+ if(seenHit!==null&&hit>seenHit)queueNeighborCycle('hit');
+ if(seenUnavailable!==null&&unavailable>seenUnavailable)queueNeighborCycle('unavailable');
+ if(seenScrape!==null&&scrape&&scrape!==seenScrape){
+  const healthy=s.prometheus.scrape_health==='up';
+  prometheusCycle=prometheusCycle.then(async()=>{
+   await playFlow('e-prom-inf','GET /metrics',650);
+   if(healthy)await playFlow('e-inf-prom','Ответ · метрики',650);
+  });
+ }
+ seenSuccess=success??null;seenPrediction=prediction??null;seenScrape=scrape??null;
+ seenHit=hit??null;seenMiss=miss??null;seenUnavailable=unavailable??null;
+}
 function short(v,n=8){return v?String(v).slice(0,n):'—'}
 function esc(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
 function renderFlows(s){
@@ -60,41 +123,41 @@ function renderFlows(s){
  const featureText=Object.entries(features).slice(0,8).map(([k,v])=>`${esc(k)}=${esc(v)}`).join(', ');
  $('prediction-detail').innerHTML=p.status==='ready'?`<strong>Запись #${esc(p.id)}</strong> · ${when(p.created_at)}<br>Признаки: <code>${featureText||'—'}</code><br>Вероятность ухода: <strong>${Number(p.probability).toFixed(4)}</strong> · класс ${esc(p.prediction)} · модель v${esc(p.model_version)}`:`<span class="muted">${p.status==='empty'?'Записей пока нет':'Postgres не ответил'}</span>`;
  $('prometheus-detail').innerHTML=m.status==='ready'?`Последний сбор: <strong>${when(m.last_scrape)}</strong> · ${m.scrape_health==='up'?'цель доступна':'цель недоступна'}<br><code>demo_predict_requests_total</code>: ${esc(m.requests_total??'—')}<br>Частота за 1 мин: ${m.rate_1m==null?'—':Number(m.rate_1m).toFixed(2)+' / сек'}`:'<span class="muted">Prometheus не ответил</span>';
- $('caption-prediction').textContent=p.status==='ready'?`Ответ · P(оттока) ${Number(p.probability).toFixed(4)}`:'Ответ · вероятность оттока';
- $('caption-metrics').textContent=m.status==='ready'?`Ответ · ${m.requests_total??'—'} запросов`:'Ответ · метрики';
  const detail={
   'e-air-pg':'DAG читает или записывает учебные данные и метаданные в Postgres. Стадию определяем по задаче Airflow.',
   'e-pg-ml':'Обучение берёт данные из Postgres и передаёт метрики, параметры и ссылку на артефакты в MLflow.',
   'e-ml-s3':'MLflow сохраняет файлы модели в S3 во время train_and_log; registry хранит ссылку на них.',
-  'e-ml-inf':`Inference загружает модель по alias production. Сейчас активна v${esc(s.model?.model_version||'—')}.`,
+  'e-ml-inf':`МЛ-сервис загружает модель по alias production. Сейчас активна v${esc(s.model?.model_version||'—')}.`,
   'e-gh-build':'Push запускает GitHub Actions: checkout, сборка образа и проверки.',
-  'e-build-inf':'После успешных проверок CD обновляет контейнер inference и проверяет релиз.',
-  'e-traffic-inf':'Backend отправляет POST /predict с признаками клиента. Активность определяется по счётчику HTTP-запросов.',
+  'e-build-inf':'После успешных проверок CD обновляет контейнер МЛ-сервиса и проверяет релиз.',
+  'e-traffic-inf':'Бэкенд отправляет POST /predict с признаками клиента. В демо его эмулирует генератор. Цикл воспроизводится после обнаружения успешного ответа.',
   'e-inf-traffic':p.status==='ready'?`HTTP 200 возвращает вероятность оттока, класс и сведения о модели. Последний сохранённый прогноз: ${Number(p.probability).toFixed(4)}, класс ${esc(p.prediction)}.`:'HTTP 200 возвращает вероятность оттока, класс и сведения о модели. Активность определяется по счётчику успешных ответов.',
   'e-inf-pg':p.status==='ready'?`После успешного /predict сохранены признаки, вероятность ${Number(p.probability).toFixed(4)}, класс ${esc(p.prediction)} и v${esc(p.model_version)}. Последняя запись #${esc(p.id)}.`:'Успешный /predict сохраняет признаки, вероятность, класс и версию модели в app.predictions.',
-  'e-inf-redis':'Запрос поиска похожих клиентов сначала проверяет кэш Redis. Подсветка — изменение счётчика таких запросов.',
-  'e-inf-qdrant':'При промахе кэша inference ищет ближайшие векторы в Qdrant. Подсветка — изменение счётчика поиска.',
-  'e-prom-inf':'Prometheus каждые 5 секунд запрашивает у inference GET /metrics. Подсветка — новое время сбора.',
-  'e-inf-prom':m.status==='ready'?`Inference отвечает Prometheus значениями метрик. Последний успешный сбор: ${when(m.last_scrape)}; всего запросов ${esc(m.requests_total??'—')}.`:'Inference отдаёт Prometheus метрики HTTP; ответ подтверждается статусом цели up.',
+  'e-inf-redis':'При POST /neighbors МЛ-сервис сначала читает результат из Redis по ключу признаков клиента.',
+  'e-redis-inf':'Redis отвечает HIT с кэшированным списком либо MISS. При HIT поиск в Qdrant не нужен.',
+  'e-inf-qdrant':'При промахе Redis МЛ-сервис ищет ближайшие векторы клиентов в Qdrant.',
+  'e-qdrant-inf':'Qdrant возвращает найденных похожих клиентов МЛ-сервису.',
+  'e-inf-redis-write':'После удачного поиска МЛ-сервис записывает результат в Redis с TTL для повторных запросов.',
+  'e-prom-inf':'Prometheus каждые 5 секунд запрашивает у МЛ-сервиса GET /metrics. Цикл воспроизводится после обнаружения нового сбора.',
+  'e-inf-prom':m.status==='ready'?`МЛ-сервис отвечает Prometheus значениями метрик. Последний успешный сбор: ${when(m.last_scrape)}; всего запросов ${esc(m.requests_total??'—')}.`:'МЛ-сервис отдаёт Prometheus метрики HTTP; ответ подтверждается статусом цели up.',
   'e-prom-graf':'Grafana запрашивает временные ряды у Prometheus для графиков. Эта связь показана как архитектурная, без индикатора отдельных запросов.'
  };
- $('flow-detail').innerHTML=detail[selectedFlow];
- $('flow-pulse').textContent=$(selectedFlow).classList.contains('live')?'● Сейчас есть наблюдаемая активность':'○ Сейчас нет наблюдаемой активности';
+ $('flow-detail').innerHTML=detail[selectedFlow];updateFlowActivity();
 }
-function render(s){$('updated').textContent='● Обновлено '+new Date(s.time).toLocaleTimeString('ru-RU');
- for(const [name,item] of Object.entries(s.services)){let n=document.querySelector(`[data-service="${name}"]`);if(!n)continue;n.href=item.url;n.target='_blank';n.querySelector('.dot').className='dot '+statusClass(item.status);n.classList.toggle('active',name==='airflow'&&s.dag.running_count>0||name==='inference'&&(s.requests.rate||0)>0)}
+function render(s){lastState=s;$('updated').textContent='● Обновлено '+new Date(s.time).toLocaleTimeString('ru-RU');
+ for(const [name,item] of Object.entries(s.services)){let n=document.querySelector(`[data-service="${name}"]`);if(!n)continue;n.href=item.url;n.target='_blank';n.querySelector('.dot').className='dot '+statusClass(item.status);if(name==='airflow')n.classList.toggle('active',s.dag.running_count>0)}
  let dag=s.dag,model=s.model,ci=s.ci,rate=s.requests.rate;
- $('node-dag').textContent=dag.running_count?dag.running_count+' DAG запущено':(dag.dag_id||'DAG')+' · '+(dag.status||'—');$('node-model').textContent=model.model_version?'production · v'+model.model_version:'production alias';$('node-traffic').textContent=rate==null?'ожидание метрик':rate+' req/s';$('node-release').textContent=short(model.service_revision?.git_commit);$('node-ci').textContent=ci.conclusion||ci.status;
+ $('node-dag').textContent=dag.running_count?dag.running_count+' DAG запущено':(dag.dag_id||'DAG')+' · '+(dag.status||'—');$('node-model').textContent=model.model_version?'production · v'+model.model_version:'production alias';$('node-traffic').textContent=rate==null?'эмуляция: генератор':'генератор · '+rate+' req/s';$('node-release').textContent=short(model.service_revision?.git_commit);$('node-ci').textContent=ci.conclusion||ci.status;
  $('model-version').textContent=model.model_version?'churn-prediction · v'+model.model_version:'Нет данных';$('model-source').textContent=model.training_source==='airflow'?'Airflow':model.training_source==='external'?'Внешнее обучение':model.training_source||'—';$('code-sha').textContent=short(model.service_revision?.git_commit);$('request-rate').textContent=rate==null?'—':rate+' / сек · '+s.requests.total+' всего';
  $('dag-status').textContent=dag.status||'—';$('dag-run').textContent=(dag.dag_id||'')+'\n'+(dag.run_id||dag.reason||'Запусков пока нет');$('dag-note').textContent=dag.dag_id==='demo_04_train_and_publish'?'Этот DAG регистрирует кандидата в MLflow; production выбирают отдельно.':'Учебный DAG показывает задачи и логи; модель в MLflow не меняет.';let tasks=dag.tasks||[];$('tasks-bar').innerHTML=tasks.map(t=>`<div class="task ${esc(t.status)}" title="${esc(t.id)}: ${esc(t.status)}"></div>`).join('');$('tasks-list').innerHTML=tasks.map(t=>`<div class="task-row"><span>${esc(t.id.replaceAll('_',' '))}</span><span>${esc(t.status)}</span></div>`).join('');$('dag-picker').innerHTML=`<button class="dag-choice ${selectedDag===null?'selected':''}" data-select-dag=""><span>Авто: активный или последний</span><span>${dag.running_count||0} active</span></button>`+(dag.dag_runs||[]).map(r=>`<button class="dag-choice ${selectedDag===r.dag_id?'selected':''}" data-select-dag="${esc(r.dag_id)}"><span>${esc(r.dag_id)}</span><span>${esc(r.status)}</span></button>`).join('');
  $('ci-status').textContent=ci.conclusion||ci.status||'—';$('jobs-list').innerHTML=(ci.jobs||[]).map(j=>`<div class="task-row"><span>${esc(j.name)}</span><span>${esc(j.conclusion||j.status)}</span></div>`).join('');$('ci-link').href=ci.url||$('ci-link').href;$('ci-hint').textContent=ci.reason||('commit: '+short(ci.head_sha));
  $('extra-services').innerHTML=[['database-ui','Adminer / Postgres'],['redisinsight','Redis Insight'],['architecture-map','Эта карта']].map(([id,label])=>`<div class="task-row"><a class="link" href="${esc(s.services[id].url)}" target="_blank">${label} ↗</a><span>${s.services[id].status==='up'?'● работает':s.services[id].status==='down'?'● нет ответа':'● нет данных'}</span></div>`).join('');
  $('events').innerHTML=s.events.length?s.events.map(e=>`<div class="event"><time>${new Date(e.time).toLocaleTimeString('ru-RU')}</time><strong>${esc(e.title)}</strong><small>${esc(e.detail)}</small></div>`).join(''):'<span class="muted">Ожидание событий…</span>';
- const activeTasks=new Set(tasks.filter(t=>t.status==='running').map(t=>t.id));const modelDag=dag.dag_id==='demo_04_train_and_publish';const deploying=ci.jobs?.some(j=>j.name.includes('Deploy')&&j.status==='in_progress');const building=ci.jobs?.some(j=>j.name.includes('Build')&&j.status==='in_progress');const live=(s.requests.rate||0)>0;
- mark('e-air-pg',modelDag&&(activeTasks.has('prepare_data')||activeTasks.has('index_customers')||activeTasks.has('train_and_log')));mark('e-pg-ml',modelDag&&activeTasks.has('train_and_log'));mark('e-ml-s3',modelDag&&activeTasks.has('train_and_log'));mark('e-ml-inf',s.model_change_recent);mark('e-gh-build',building);mark('e-build-inf',deploying);mark('e-traffic-inf',live);mark('e-inf-traffic',s.response_recent);mark('e-inf-pg',s.prediction_recent);mark('e-inf-redis',s.requests.neighbors_active);mark('e-inf-qdrant',s.requests.qdrant_active);mark('e-prom-inf',s.prometheus_recent);mark('e-inf-prom',s.prometheus_recent&&s.prometheus.scrape_health==='up');mark('e-prom-graf',false);$('build-node').classList.toggle('active',!!(building||deploying));$('build-node').querySelector('.dot').className='dot '+(ci.status==='unavailable'?'unknown':ci.conclusion==='failure'?'down':'up');$('ci-stage-badge').hidden=!(building||deploying);$('ci-stage-badge').textContent=deploying?'Выкладка inference':building?'Сборка и проверки':'';document.querySelectorAll('.flow-caption').forEach(c=>c.classList.toggle('selected',c.dataset.flow===selectedFlow));renderFlows(s)}
+ const activeTasks=new Set(tasks.filter(t=>t.status==='running').map(t=>t.id));const modelDag=dag.dag_id==='demo_04_train_and_publish';const deploying=ci.jobs?.some(j=>j.name.includes('Deploy')&&j.status==='in_progress');const building=ci.jobs?.some(j=>j.name.includes('Build')&&j.status==='in_progress');
+ mark('e-air-pg',modelDag&&(activeTasks.has('prepare_data')||activeTasks.has('index_customers')||activeTasks.has('train_and_log')));mark('e-pg-ml',modelDag&&activeTasks.has('train_and_log'));mark('e-ml-s3',modelDag&&activeTasks.has('train_and_log'));mark('e-ml-inf',s.model_change_recent);mark('e-gh-build',building);mark('e-build-inf',deploying);mark('e-prom-graf',false);$('build-node').classList.toggle('active',!!(building||deploying));$('build-node').querySelector('.dot').className='dot '+(ci.status==='unavailable'?'unknown':ci.conclusion==='failure'?'down':'up');$('ci-stage-badge').hidden=!(building||deploying);$('ci-stage-badge').textContent=deploying?'Выкладка МЛ-сервиса':building?'Сборка и проверки':'';renderFlows(s);observeCycles(s)}
 async function refresh(){if(busy)return;busy=true;try{const url='/api/state'+(selectedDag?'?dag_id='+encodeURIComponent(selectedDag):'');const r=await fetch(url,{cache:'no-store'});if(!r.ok)throw Error(r.status);render(await r.json())}catch(e){$('updated').textContent='● Связь с картой потеряна'}finally{busy=false}}
 $('dag-picker').onclick=e=>{const button=e.target.closest('[data-select-dag]');if(!button)return;selectedDag=button.dataset.selectDag||null;refresh()};
-$('flow-select').onchange=e=>selectFlow(e.target.value);flowSvg.onclick=e=>{const hit=e.target.closest('.hit');if(hit)selectFlow(hit.dataset.flow)};document.querySelector('.canvas').onclick=e=>{const caption=e.target.closest('.flow-caption');if(caption)selectFlow(caption.dataset.flow)};
+$('flow-select').onchange=e=>selectFlow(e.target.value);flowSvg.onclick=e=>{const hit=e.target.closest('.hit');if(hit)selectFlow(hit.dataset.flow)};
 $('trigger').onclick=async()=>{let b=$('trigger');b.disabled=true;b.textContent='Запускаю…';try{let r=await fetch('/api/demo/trigger',{method:'POST'});if(!r.ok){let j=await r.json();throw Error(j.detail||r.status)}const started=await r.json();selectedDag=started.dag_id;await refresh()}catch(e){alert('Не удалось запустить DAG: '+e.message)}finally{b.disabled=false;b.textContent='▶ Запустить демо DAG'}};
 refresh();setInterval(refresh,3000);
 </script></body></html>
