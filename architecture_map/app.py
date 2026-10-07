@@ -17,6 +17,9 @@ app = FastAPI(title="ML platform map")
 ROOT = Path(__file__).parent
 AIRFLOW = "http://airflow:8080"
 DAG_ID = "demo_04_train_and_publish"
+DEMO_DAGS = (
+    "demo_01_ml_pipeline", "demo_02_auto_retry", "demo_03_manual_recovery", DAG_ID,
+)
 SERVICES = {
     "airflow": ("http://airflow:8080/api/v2/version", "http://localhost:8080"),
     "mlflow": ("http://mlflow:5000/health", "http://localhost:5000"),
@@ -71,33 +74,65 @@ def probe(item):
     return name, {"status": status, "url": link}
 
 
-def airflow_request(method, path, **kwargs):
+def airflow_session():
     password_file = Path("/airflow-auth/simple_auth_manager_passwords.json.generated")
     password = json.loads(password_file.read_text(encoding="utf-8"))["admin"]
     token = requests.post(AIRFLOW + "/auth/token", json={"username": "admin", "password": password}, timeout=3)
     token.raise_for_status()
-    response = requests.request(method, AIRFLOW + "/api/v2" + path,
-                                headers={"Authorization": "Bearer " + token.json()["access_token"]},
-                                timeout=4, **kwargs)
+    session = requests.Session()
+    session.headers["Authorization"] = "Bearer " + token.json()["access_token"]
+    return session
+
+
+def airflow_api(session, method, path, **kwargs):
+    response = session.request(method, AIRFLOW + "/api/v2" + path, timeout=4, **kwargs)
     response.raise_for_status()
     return response.json()
 
 
-def dag_state():
+def airflow_request(method, path, **kwargs):
+    with airflow_session() as session:
+        return airflow_api(session, method, path, **kwargs)
+
+
+def choose_dag(runs, selected_dag=None):
+    """Follow an active DAG by default, then the most recently started run."""
+    if selected_dag:
+        return next((run for run in runs if run["dag_id"] == selected_dag), None)
+    active = [run for run in runs if run["status"] in {"running", "queued"}]
+    candidates = active or runs
+    return max(candidates, key=lambda run: run.get("start_date") or "") if candidates else None
+
+
+def dag_state(selected_dag=None):
     try:
-        runs = airflow_request("GET", f"/dags/{DAG_ID}/dagRuns", params={"limit": 1, "order_by": "-start_date"})
-        items = runs.get("dag_runs", [])
-        if not items:
-            return {"status": "no_runs", "tasks": []}
-        run = items[0]
-        run_id = run["dag_run_id"]
-        tasks = airflow_request("GET", f"/dags/{DAG_ID}/dagRuns/{run_id}/taskInstances", params={"limit": 100})
-        return {"status": run.get("state"), "run_id": run_id,
-                "start_date": run.get("start_date"), "tasks": [
-                    {"id": task["task_id"], "status": task.get("state") or "pending"}
-                    for task in tasks.get("task_instances", [])]}
+        with airflow_session() as session:
+            available = {dag["dag_id"] for dag in airflow_api(session, "GET", "/dags", params={"limit": 100})["dags"]}
+            runs = []
+            for dag_id in DEMO_DAGS:
+                if dag_id not in available:
+                    continue
+                response = airflow_api(session, "GET", f"/dags/{dag_id}/dagRuns",
+                                       params={"limit": 1, "order_by": "-start_date"})
+                for run in response.get("dag_runs", []):
+                    runs.append({"dag_id": dag_id, "run_id": run["dag_run_id"],
+                                 "status": run.get("state") or "unknown",
+                                 "start_date": run.get("start_date") or run.get("logical_date")})
+            runs.sort(key=lambda run: run.get("start_date") or "", reverse=True)
+            chosen = choose_dag(runs, selected_dag)
+            result = {"dag_runs": runs, "running_count": sum(
+                run["status"] in {"running", "queued"} for run in runs)}
+            if not chosen:
+                return {**result, "dag_id": selected_dag, "status": "no_runs", "tasks": []}
+            tasks = airflow_api(session, "GET",
+                                f"/dags/{chosen['dag_id']}/dagRuns/{chosen['run_id']}/taskInstances",
+                                params={"limit": 100})
+            return {**result, "dag_id": chosen["dag_id"], "status": chosen["status"],
+                    "run_id": chosen["run_id"], "start_date": chosen["start_date"],
+                    "tasks": [{"id": task["task_id"], "status": task.get("state") or "pending"}
+                              for task in tasks.get("task_instances", [])]}
     except (OSError, ValueError, KeyError, requests.RequestException) as exc:
-        return {"status": "unavailable", "reason": type(exc).__name__, "tasks": []}
+        return {"status": "unavailable", "reason": type(exc).__name__, "tasks": [], "dag_runs": []}
 
 
 def model_state():
@@ -140,11 +175,13 @@ def health():
 
 
 @app.get("/api/state")
-def state():
+def state(dag_id: str | None = None):
     global _previous, _last_request_seen, _last_model_change
+    if dag_id and dag_id not in DEMO_DAGS:
+        raise HTTPException(400, "Unknown demo DAG")
     with ThreadPoolExecutor(max_workers=14) as pool:
         service_future = pool.submit(lambda: dict(pool.map(probe, SERVICES.items())))
-        dag_future = pool.submit(dag_state)
+        dag_future = pool.submit(dag_state, dag_id)
         model_future = pool.submit(model_state)
         metrics_future = pool.submit(request_stats)
         services = service_future.result()
@@ -164,16 +201,20 @@ def state():
     if metrics["total"] is not None and metrics["total"] > 0 and metrics["total"] != previous_total:
         _last_request_seen = time.time()
     services["traffic"]["status"] = "up" if time.time() - _last_request_seen < 15 else "unknown"
-    if dag.get("run_id") != previous.get("dag_run") and dag.get("run_id"):
-        record("dag", "Новый запуск Airflow", dag["run_id"])
-    if dag.get("status") != previous.get("dag_status") and dag.get("run_id"):
-        record("dag", "DAG: " + str(dag["status"]), dag["run_id"])
+    previous_runs = previous.get("dag_runs")
+    if previous_runs is not None:
+        for run in dag.get("dag_runs", []):
+            old = previous_runs.get(run["dag_id"])
+            if not old or old["run_id"] != run["run_id"]:
+                record("dag", "Новый запуск: " + run["dag_id"], run["run_id"])
+            elif old["status"] != run["status"]:
+                record("dag", run["dag_id"] + ": " + run["status"], run["run_id"])
     if model.get("model_version") and model.get("model_version") != previous.get("model_version"):
         record("model", "Активная модель: версия " + str(model["model_version"]), model.get("mlflow_run_id", ""))
         if previous.get("model_version"):
             _last_model_change = time.time()
     old_tasks = previous.get("tasks", {})
-    if dag.get("run_id") == previous.get("dag_run"):
+    if (dag.get("dag_id"), dag.get("run_id")) == (previous.get("dag_id"), previous.get("dag_run")):
         for task in dag.get("tasks", []):
             if old_tasks.get(task["id"]) != task["status"] and task["status"] in {"running", "success", "failed"}:
                 record("task", task["id"] + ": " + task["status"], dag["run_id"])
@@ -184,7 +225,8 @@ def state():
     metrics["qdrant_active"] = (metrics["qdrant"] is not None and previous.get("qdrant") is not None
                                  and metrics["qdrant"] > previous["qdrant"])
     with _lock:
-        _previous = {"dag_run": dag.get("run_id"), "dag_status": dag.get("status"),
+        _previous = {"dag_id": dag.get("dag_id"), "dag_run": dag.get("run_id"),
+                     "dag_runs": {run["dag_id"]: run for run in dag.get("dag_runs", [])},
                      "tasks": {task["id"]: task["status"] for task in dag.get("tasks", [])},
                      "model_version": model.get("model_version"), "requests": metrics["total"],
                      "neighbors": metrics["neighbors"], "qdrant": metrics["qdrant"], "sample_at": time.time()}
@@ -202,7 +244,7 @@ def trigger():
         airflow_request("POST", f"/dags/{DAG_ID}/dagRuns",
                         json={"dag_run_id": run_id, "logical_date": None, "conf": {}})
         record("dag", "Запуск DAG с карты", run_id)
-        return {"run_id": run_id}
+        return {"dag_id": DAG_ID, "run_id": run_id}
     except (OSError, ValueError, KeyError, requests.RequestException) as exc:
         raise HTTPException(status_code=502, detail=f"Airflow недоступен: {type(exc).__name__}") from exc
 
