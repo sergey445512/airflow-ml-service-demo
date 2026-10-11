@@ -30,7 +30,7 @@ def sample(values, name, **labels):
 
 before = metrics()
 for tenure, expected in [(6, 200), (-1, 422)]:
-    req = urllib.request.Request("http://inference:8000/predict",
+    req = urllib.request.Request("http://inference:8000/churn/predict",
         data=json.dumps(dict(tenure_months=tenure, monthly_spend=120, support_tickets=5)).encode(),
         headers={"Content-Type": "application/json"})
     try:

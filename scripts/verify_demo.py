@@ -37,9 +37,10 @@ def api(method, path, **kwargs):
 errors = api("GET", "/importErrors")
 assert errors["total_entries"] == 0, errors
 ids = ["demo_01_ml_pipeline", "demo_02_auto_retry", "demo_03_manual_recovery", "demo_04_train_and_publish"]
+batch_dag = "demo_05_weekly_batch_scoring"
 for _ in range(90):
     available = {dag["dag_id"] for dag in api("GET", "/dags", params={"limit": 100})["dags"]}
-    if set(ids) <= available:
+    if set(ids + [batch_dag]) <= available:
         break
     time.sleep(2)
 else:
@@ -80,14 +81,14 @@ else:
 assert recovered
 retry = api("GET", f"/dags/demo_02_auto_retry/dagRuns/{run_id}/taskInstances/fetch_data")
 assert retry["try_number"] == 2, retry
-response = requests.post("http://inference:8000/predict", json={"tenure_months": 6, "monthly_spend": 120, "support_tickets": 5}, timeout=120)
+response = requests.post("http://inference:8000/churn/predict", json={"tenure_months": 6, "monthly_spend": 120, "support_tickets": 5}, timeout=120)
 response.raise_for_status()
 prediction = response.json()
 from mlflow import MlflowClient
 version = MlflowClient().get_model_version_by_alias("churn-prediction", "production")
 assert prediction["mlflow_run_id"] == version.run_id, prediction
 assert 0 <= prediction["churn_probability"] <= 1, prediction
-invalid = requests.post("http://inference:8000/predict", json={"tenure_months": -1, "monthly_spend": 120, "support_tickets": 5}, timeout=20)
+invalid = requests.post("http://inference:8000/churn/predict", json={"tenure_months": -1, "monthly_spend": 120, "support_tickets": 5}, timeout=20)
 assert invalid.status_code == 422, invalid.text
 from src.pipeline import connect
 with connect() as conn, conn.cursor() as cur:
@@ -96,4 +97,28 @@ with connect() as conn, conn.cursor() as cur:
     cur.execute("SELECT count(*) FROM app.predictions WHERE mlflow_run_id=%s", (prediction["mlflow_run_id"],))
     count = cur.fetchone()[0]
     assert count >= 2
-print(json.dumps({"result": "PASS", "dag_states": states, "retry_attempts": retry["try_number"], "manual_recovery": recovered, "prediction": prediction, "saved_predictions": count}, indent=2), flush=True)
+# The batch DAG runs after training so the temporary CI stack has a production model.
+batch_run_id = "verification_batch_" + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
+api("PATCH", f"/dags/{batch_dag}", json={"is_paused": False})
+api("POST", f"/dags/{batch_dag}/dagRuns",
+    json={"dag_run_id": batch_run_id, "logical_date": None, "conf": {}})
+for _ in range(120):
+    batch_state = api("GET", f"/dags/{batch_dag}/dagRuns/{batch_run_id}")["state"]
+    if batch_state == "success":
+        break
+    if batch_state == "failed":
+        raise AssertionError(api("GET", f"/dags/{batch_dag}/dagRuns/{batch_run_id}/taskInstances"))
+    time.sleep(3)
+else:
+    raise TimeoutError("Batch scoring did not finish")
+with connect() as conn, conn.cursor() as cur:
+    cur.execute("""SELECT count(*), count(DISTINCT model_version), min(model_version),
+        count(DISTINCT customer_id), count(*) FILTER (WHERE probability < 0 OR probability > 1)
+        FROM app.churn_batch_scores WHERE airflow_run_id = %s""", (batch_run_id,))
+    batch_count, versions, batch_version, customers, invalid_probabilities = cur.fetchone()
+assert (batch_count, versions, batch_version, customers, invalid_probabilities) == (
+    1200, 1, int(version.version), 1200, 0)
+print(json.dumps({"result": "PASS", "dag_states": states, "batch_state": batch_state,
+                  "batch_scored_customers": batch_count, "batch_model_version": batch_version,
+                  "retry_attempts": retry["try_number"], "manual_recovery": recovered,
+                  "prediction": prediction, "saved_predictions": count}, indent=2), flush=True)

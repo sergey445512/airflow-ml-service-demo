@@ -18,7 +18,7 @@ def make_customer(rng, scenario):
 
 def send(url, customer):
     request = urllib.request.Request(
-        url + "/predict", data=json.dumps(customer).encode(),
+        url + "/churn/predict", data=json.dumps(customer).encode(),
         headers={"Content-Type": "application/json"},
     )
     try:

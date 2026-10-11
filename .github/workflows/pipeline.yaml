@@ -24,15 +24,41 @@ jobs:
       packages: write
     outputs:
       image: ${{ steps.publish.outputs.image }}
+      airflow_image: ${{ steps.publish_airflow.outputs.image }}
+      dag_changed: ${{ steps.changes.outputs.dag_changed }}
+      service_changed: ${{ steps.changes.outputs.service_changed }}
     env:
       PLATFORM_IMAGE: ml-airflow-demo:ci-platform
       SERVICE_IMAGE: ml-airflow-demo:ci-service
       MAP_IMAGE: ml-airflow-demo:ci-map
+      GATEWAY_IMAGE: ml-airflow-demo:ci-gateway
       COMPOSE_PROJECT_NAME: ml-ci
     steps:
       - uses: actions/checkout@v6
         with:
           persist-credentials: false
+          fetch-depth: 2
+      - name: Detect DAG and pipeline changes
+        id: changes
+        env:
+          BEFORE: ${{ github.event.before }}
+        run: |
+          if [[ "$GITHUB_EVENT_NAME" == workflow_dispatch || -z "$BEFORE" || "$BEFORE" =~ ^0+$ ]] || ! git cat-file -e "$BEFORE^{commit}" 2>/dev/null; then
+            dag_changed=true
+            service_changed=true
+          else
+            files=$(git diff --name-only "$BEFORE" "$GITHUB_SHA")
+            dag_changed=false
+            service_changed=false
+            if grep -Eq '^(dags/|src/|scripts/verify_demo.py|Dockerfile$|model_config.json$|compose.yaml$|compose.release.yaml$)' <<< "$files"; then
+              dag_changed=true
+            fi
+            if grep -Eq '^(service/|src/|scripts/|Dockerfile.service$|compose.yaml$|compose.release.yaml$)' <<< "$files"; then
+              service_changed=true
+            fi
+          fi
+          echo "dag_changed=$dag_changed" >> "$GITHUB_OUTPUT"
+          echo "service_changed=$service_changed" >> "$GITHUB_OUTPUT"
       - name: Authenticate platform image download
         uses: docker/login-action@v4
         with:
@@ -46,6 +72,8 @@ jobs:
           docker build -f Dockerfile.service --build-arg SOURCE_REVISION="$GITHUB_SHA" --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" -t "$SERVICE_IMAGE" .
       - name: Build architecture map
         run: docker build -f Dockerfile.map -t "$MAP_IMAGE" .
+      - name: Build stable inference gateway
+        run: docker build -f Dockerfile.gateway -t "$GATEWAY_IMAGE" .
       - name: Validate configuration and dependencies
         run: |
           docker compose -f compose.yaml -f compose.release.yaml config --quiet
@@ -77,22 +105,57 @@ jobs:
       - name: Verify S3 models and exact code revision
         run: |
           docker compose -p ml-ci exec -T -e MLFLOW_ENABLE_ARTIFACTS_PROGRESS_BAR=false mlflow python scripts/verify_s3.py
-          docker compose -p ml-ci exec -T inference python scripts/smoke_release.py --revision "$GITHUB_SHA"
+          docker compose -p ml-ci exec -T inference-blue python scripts/smoke_release.py --revision "$GITHUB_SHA"
       - name: Verify production alias in MLflow
-        run: docker compose -p ml-ci exec -T inference python scripts/verify_registry.py
+        run: docker compose -p ml-ci exec -T inference-blue python scripts/verify_registry.py
       - name: Verify independently trained model promotion and rollback
         run: |
-          docker compose -p ml-ci -f compose.yaml -f compose.release.yaml run --rm --no-deps --entrypoint python inference scripts/train_external_model.py
-          docker compose -p ml-ci exec -T inference python scripts/verify_external_model.py
+          docker compose -p ml-ci -f compose.yaml -f compose.release.yaml run --rm --no-deps --entrypoint python inference-blue scripts/train_external_model.py
+          docker compose -p ml-ci exec -T inference-blue python scripts/verify_external_model.py
       - name: Verify Prometheus and Grafana
         run: |
           docker compose -p ml-ci exec -T airflow python scripts/verify_monitoring.py
-          docker compose -p ml-ci exec -T inference python scripts/verify_traffic.py
+          docker compose -p ml-ci exec -T inference-blue python scripts/verify_traffic.py
       - name: Verify Qdrant, Redis and their user interfaces
-        run: docker compose -p ml-ci exec -T inference python scripts/verify_stores.py
+        run: docker compose -p ml-ci exec -T inference-blue python scripts/verify_stores.py
+      - name: Verify warm standby and live gateway switch
+        run: |
+          docker compose -p ml-ci exec -T inference-green python scripts/smoke_release.py --revision "$GITHUB_SHA"
+          gateway=$(docker compose -p ml-ci ps -q inference)
+          cat > /tmp/green.conf <<'EOF'
+          server {
+              listen 8000;
+              server_name _;
+              location / {
+                  proxy_pass http://inference-green:8000;
+                  add_header X-Serving-Slot green always;
+                  proxy_set_header Host $host;
+                  proxy_connect_timeout 5s;
+                  proxy_read_timeout 180s;
+              }
+          }
+          EOF
+          docker cp /tmp/green.conf "$gateway:/etc/nginx/conf.d/default.conf"
+          docker exec "$gateway" nginx -t
+          docker exec "$gateway" nginx -s reload
+          curl -fsS -D /tmp/gateway-headers http://localhost:8000/model -o /tmp/gateway-model
+          grep -qi '^X-Serving-Slot: green' /tmp/gateway-headers
+          docker compose -p ml-ci exec -T inference-green python scripts/smoke_release.py --revision "$GITHUB_SHA" --base-url http://inference:8000 --expected-slot green
+      - name: Publish tested Airflow image
+        id: publish_airflow
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && steps.changes.outputs.dag_changed == 'true'
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          registry="ghcr.io/${GITHUB_REPOSITORY,,}"
+          echo "$GH_TOKEN" | docker login ghcr.io -u "$GITHUB_ACTOR" --password-stdin
+          docker tag "$PLATFORM_IMAGE" "$registry:airflow-$GITHUB_SHA"
+          docker push "$registry:airflow-$GITHUB_SHA"
+          digest=$(docker image inspect "$registry:airflow-$GITHUB_SHA" --format '{{index .RepoDigests 0}}')
+          echo "image=$digest" >> "$GITHUB_OUTPUT"
       - name: Publish tested service image
         id: publish
-        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+        if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && steps.changes.outputs.service_changed == 'true'
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
         run: |
@@ -113,7 +176,7 @@ jobs:
   deploy:
     name: Deploy verified image to local demo
     needs: ci
-    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main'
+    if: github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && needs.ci.outputs.service_changed == 'true'
     runs-on: [self-hosted, Windows, X64, ml-demo]
     timeout-minutes: 20
     permissions:
@@ -135,8 +198,34 @@ jobs:
       - name: Deploy service without restarting platform
         env:
           RELEASE_IMAGE: ${{ needs.ci.outputs.image }}
-        run: ./scripts/deploy.ps1 -Image $env:RELEASE_IMAGE -Revision $env:GITHUB_SHA
+        run: ./scripts/deploy_bluegreen.ps1 -Image $env:RELEASE_IMAGE -Revision $env:GITHUB_SHA
       - name: Deployment summary
         run: |
           "Deployed commit: $env:GITHUB_SHA" >> $env:GITHUB_STEP_SUMMARY
           'Local service: http://localhost:8000' >> $env:GITHUB_STEP_SUMMARY
+
+  deploy_airflow:
+    name: Release DAGs to Airflow
+    needs: [ci, deploy]
+    if: always() && github.event_name != 'pull_request' && github.ref == 'refs/heads/main' && needs.ci.result == 'success' && needs.ci.outputs.dag_changed == 'true' && (needs.deploy.result == 'success' || needs.deploy.result == 'skipped')
+    runs-on: [self-hosted, Windows, X64, ml-demo]
+    timeout-minutes: 20
+    permissions:
+      contents: read
+      packages: read
+    defaults:
+      run:
+        shell: powershell
+    steps:
+      - uses: actions/checkout@v6
+        with:
+          persist-credentials: false
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - name: Replace Airflow image and verify DAG parsing
+        env:
+          RELEASE_IMAGE: ${{ needs.ci.outputs.airflow_image }}
+        run: ./scripts/deploy_airflow.ps1 -Image $env:RELEASE_IMAGE -Revision $env:GITHUB_SHA

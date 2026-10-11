@@ -29,7 +29,7 @@ MODEL_CONTRACT = "churn-v1"
 
 @app.middleware("http")
 async def measure_prediction(request, call_next):
-    if request.url.path != "/predict" or request.method != "POST":
+    if request.url.path not in {"/churn/predict", "/predict"} or request.method != "POST":
         return await call_next(request)
     started = time.perf_counter()
     status = "500"
@@ -146,7 +146,8 @@ def version():
     return code_revision()
 
 
-@app.post("/predict")
+@app.post("/predict", include_in_schema=False)
+@app.post("/churn/predict")
 def predict(customer: Customer):
     info, model = serving_model()
     features = customer.model_dump()

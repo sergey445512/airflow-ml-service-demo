@@ -19,8 +19,10 @@ app = FastAPI(title="ML platform map")
 ROOT = Path(__file__).parent
 AIRFLOW = "http://airflow:8080"
 DAG_ID = "demo_04_train_and_publish"
+BATCH_DAG_ID = "demo_05_weekly_batch_scoring"
 DEMO_DAGS = (
     "demo_01_ml_pipeline", "demo_02_auto_retry", "demo_03_manual_recovery", DAG_ID,
+    BATCH_DAG_ID,
 )
 SERVICES = {
     "airflow": ("http://airflow:8080/api/v2/version", "http://localhost:8080"),
@@ -184,6 +186,31 @@ def latest_prediction():
         return {"status": "unavailable", "reason": type(exc).__name__}
 
 
+def latest_batch():
+    """Read the most recent committed batch snapshot, separate from online predictions."""
+    try:
+        with closing(psycopg2.connect(os.environ["MAP_DATABASE_URL"], connect_timeout=2,
+                                      options="-c default_transaction_read_only=on")) as connection:
+            with connection.cursor() as cursor:
+                cursor.execute("""SELECT scored_on, count(*),
+                    count(*) FILTER (WHERE prediction = 1), max(model_version),
+                    max(airflow_run_id), max(scored_at)
+                    FROM app.churn_batch_scores
+                    WHERE scored_on = (SELECT max(scored_on) FROM app.churn_batch_scores)
+                    GROUP BY scored_on""")
+                row = cursor.fetchone()
+        if row is None:
+            return {"status": "empty"}
+        scored_on, count, high_risk, version, run_id, scored_at = row
+        return {"status": "ready", "scored_on": scored_on.isoformat(),
+                "count": count, "high_risk": high_risk, "model_version": version,
+                "airflow_run_id": run_id, "scored_at": scored_at.isoformat()}
+    except psycopg2.errors.UndefinedTable:
+        return {"status": "empty"}
+    except (KeyError, psycopg2.Error) as exc:
+        return {"status": "unavailable", "reason": type(exc).__name__}
+
+
 def prometheus_state():
     """Read Prometheus' own scrape status and aggregate, not inference's local copy."""
     def value(session, expression):
@@ -234,12 +261,14 @@ def state(dag_id: str | None = None):
         model_future = pool.submit(model_state)
         metrics_future = pool.submit(request_stats)
         prediction_future = pool.submit(latest_prediction)
+        batch_future = pool.submit(latest_batch)
         prometheus_future = pool.submit(prometheus_state)
         services = service_future.result()
         dag = dag_future.result()
         model = model_future.result()
         metrics = metrics_future.result()
         prediction = prediction_future.result()
+        batch = batch_future.result()
         prometheus = prometheus_future.result()
     with _lock:
         ci = dict(_ci) if _ci else None
@@ -280,6 +309,10 @@ def state(dag_id: str | None = None):
     if (prediction.get("id") and previous.get("prediction_id") is not None
             and prediction["id"] != previous["prediction_id"]):
         _last_prediction_seen = time.time()
+    if (batch.get("airflow_run_id") and previous.get("batch_run_id") is not None
+            and batch["airflow_run_id"] != previous["batch_run_id"]):
+        record("batch", "Пакетный скоринг завершён",
+               str(batch["count"]) + " клиентов · модель v" + str(batch["model_version"]))
     if (prometheus.get("last_scrape") and previous.get("prometheus_scrape") is not None
             and prometheus["last_scrape"] != previous["prometheus_scrape"]):
         _last_prometheus_seen = time.time()
@@ -290,26 +323,37 @@ def state(dag_id: str | None = None):
                      "model_version": model.get("model_version"), "requests": metrics["total"],
                      "neighbors": metrics["neighbors"], "qdrant": metrics["qdrant"],
                      "prediction_id": prediction.get("id"),
+                      "batch_run_id": batch.get("airflow_run_id"),
                      "prometheus_scrape": prometheus.get("last_scrape"), "sample_at": time.time()}
         events = list(_events[:14])
     return {"time": stamp(), "services": services, "dag": dag, "model": model,
             "requests": metrics, "model_change_recent": time.time() - _last_model_change < 20,
             "prediction": prediction, "prediction_recent": time.time() - _last_prediction_seen < 6,
+            "batch": batch,
             "prometheus": prometheus, "prometheus_recent": time.time() - _last_prometheus_seen < 7,
             "ci": ci, "events": events}
 
 
-@app.post("/api/demo/trigger")
-def trigger():
+def trigger_dag(dag_id):
     try:
-        airflow_request("PATCH", f"/dags/{DAG_ID}", json={"is_paused": False})
+        airflow_request("PATCH", f"/dags/{dag_id}", json={"is_paused": False})
         run_id = "map_demo_" + datetime.now(timezone.utc).strftime("%Y%m%dT%H%M%S")
-        airflow_request("POST", f"/dags/{DAG_ID}/dagRuns",
+        airflow_request("POST", f"/dags/{dag_id}/dagRuns",
                         json={"dag_run_id": run_id, "logical_date": None, "conf": {}})
-        record("dag", "Запуск DAG с карты", run_id)
-        return {"dag_id": DAG_ID, "run_id": run_id}
+        record("dag", "Запуск DAG с карты: " + dag_id, run_id)
+        return {"dag_id": dag_id, "run_id": run_id}
     except (OSError, ValueError, KeyError, requests.RequestException) as exc:
         raise HTTPException(status_code=502, detail=f"Airflow недоступен: {type(exc).__name__}") from exc
+
+
+@app.post("/api/demo/trigger")
+def trigger():
+    return trigger_dag(DAG_ID)
+
+
+@app.post("/api/demo/trigger/batch")
+def trigger_batch():
+    return trigger_dag(BATCH_DAG_ID)
 
 
 @app.post("/api/observer")
@@ -338,7 +382,7 @@ def deploy_event(payload: dict):
     stage = str(payload.get("stage") or "")[:80]
     if stage not in {"pull", "update", "verify", "success", "rollback"}:
         raise HTTPException(400, "invalid stage")
-    record("deploy", {"pull": "Загрузка образа", "update": "Замена inference",
+    record("deploy", {"pull": "Загрузка образа", "update": "Подготовка резервной копии ML-сервиса",
                       "verify": "Проверка релиза", "success": "Релиз завершён",
                       "rollback": "Откат релиза"}[stage], str(payload.get("revision") or "")[:8])
     return {"status": "ok"}

@@ -28,7 +28,7 @@ try:
     assert info["model_contract"] == "churn-v1", info
     assert info["airflow_run_id"] is None and info["git_commit"] is None, info
 
-    response = requests.post("http://inference:8000/predict", json={
+    response = requests.post("http://inference:8000/churn/predict", json={
         "tenure_months": 6, "monthly_spend": 120, "support_tickets": 5,
     }, timeout=120)
     response.raise_for_status()

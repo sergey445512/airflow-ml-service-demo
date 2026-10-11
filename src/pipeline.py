@@ -53,6 +53,17 @@ def initialize():
                 probability DOUBLE PRECISION NOT NULL,
                 created_at TIMESTAMPTZ NOT NULL DEFAULT now()
             );
+            CREATE TABLE IF NOT EXISTS app.churn_batch_scores (
+                scored_on DATE NOT NULL,
+                customer_id INTEGER NOT NULL REFERENCES app.customers(customer_id),
+                mlflow_run_id TEXT NOT NULL,
+                model_version INTEGER NOT NULL,
+                probability DOUBLE PRECISION NOT NULL,
+                prediction INTEGER NOT NULL,
+                airflow_run_id TEXT NOT NULL,
+                scored_at TIMESTAMPTZ NOT NULL DEFAULT now(),
+                PRIMARY KEY (scored_on, customer_id)
+            );
             ALTER TABLE app.model_runs ALTER COLUMN airflow_run_id DROP NOT NULL;
             ALTER TABLE app.model_runs ALTER COLUMN git_commit DROP NOT NULL;
             ALTER TABLE app.model_runs ALTER COLUMN roc_auc DROP NOT NULL;

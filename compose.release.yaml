@@ -1,11 +1,16 @@
 # Code is baked into the verified image. Persistent data volumes are retained.
 services:
+  inference:
+    build: !reset null
   airflow:
     volumes: !override
       - airflow-data:/opt/airflow
   mlflow:
     volumes: !reset []
-  inference:
+  inference-blue:
+    build: !reset null
+    volumes: !reset []
+  inference-green:
     build: !reset null
     volumes: !reset []
   traffic:

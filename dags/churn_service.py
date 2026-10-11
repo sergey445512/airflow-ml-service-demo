@@ -59,7 +59,7 @@ def service_pipeline():
         candidate = MlflowClient().get_model_version("churn-prediction", result["model_version"])
         if candidate.run_id != result["mlflow_run_id"]:
             raise ValueError("Candidate version does not match the training run")
-        response = requests.post("http://inference:8000/predict", json={"tenure_months": 6, "monthly_spend": 120, "support_tickets": 5}, timeout=120)
+        response = requests.post("http://inference:8000/churn/predict", json={"tenure_months": 6, "monthly_spend": 120, "support_tickets": 5}, timeout=120)
         response.raise_for_status()
         prediction = response.json()
         production = MlflowClient().get_model_version_by_alias("churn-prediction", "production")

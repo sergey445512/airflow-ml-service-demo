@@ -4,6 +4,9 @@ param(
     [string]$DeploymentRoot = 'D:\projects\_deploy\ml-airflow-demo',
     [switch]$SkipPull
 )
+& (Join-Path $PSScriptRoot 'deploy_bluegreen.ps1') -Image $Image -Revision $Revision -DeploymentRoot $DeploymentRoot -SkipPull:$SkipPull
+if (-not $?) { throw 'Blue/green service deployment failed' }
+return
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 

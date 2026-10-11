@@ -191,6 +191,7 @@ services:
 
   airflow:
     <<: *app
+    image: ${AIRFLOW_IMAGE:-ml-airflow-demo:platform}
     build: .
     depends_on:
       mlflow:
@@ -212,9 +213,9 @@ services:
       - .:/opt/demo:ro
       - airflow-data:/opt/airflow
 
-  inference:
+  inference-blue: &inference
     <<: *app
-    image: ${SERVICE_IMAGE:-ml-airflow-demo:service}
+    image: ${BLUE_IMAGE:-${SERVICE_IMAGE:-ml-airflow-demo:service}}
     build:
       context: .
       dockerfile: Dockerfile.service
@@ -227,9 +228,29 @@ services:
         condition: service_healthy
     entrypoint: []
     command: [uvicorn, service.app:app, --host, 0.0.0.0, --port, '8000']
-    ports: ['127.0.0.1:8000:8000']
     healthcheck:
       test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://localhost:8000/health', timeout=5)"]
+      interval: 10s
+      timeout: 7s
+      retries: 20
+
+  inference-green:
+    <<: *inference
+    image: ${GREEN_IMAGE:-${SERVICE_IMAGE:-ml-airflow-demo:service}}
+
+  inference:
+    image: ${GATEWAY_IMAGE:-ml-airflow-demo:gateway}
+    build:
+      context: .
+      dockerfile: Dockerfile.gateway
+    ports: ['127.0.0.1:8000:8000']
+    volumes:
+      - gateway-config:/etc/nginx/conf.d
+    depends_on:
+      inference-blue:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, wget, -q, -O, /dev/null, 'http://127.0.0.1:8000/health']
       interval: 10s
       timeout: 7s
       retries: 20
@@ -265,3 +286,4 @@ volumes:
   s3-data:
   mlflow-artifacts:
   airflow-data:
+  gateway-config:

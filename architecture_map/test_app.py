@@ -25,6 +25,7 @@ class CounterRateTest(unittest.TestCase):
              patch.object(observer, "model_state", return_value={"status": "unavailable"}), \
              patch.object(observer, "request_stats", return_value=metrics), \
              patch.object(observer, "latest_prediction", return_value={"status": "empty"}), \
+             patch.object(observer, "latest_batch", return_value={"status": "empty"}), \
              patch.object(observer, "prometheus_state", return_value={"status": "unavailable"}):
             result = observer.state()
         self.assertEqual(result["requests"]["total"], 2)
@@ -56,3 +57,18 @@ class DagSelectionTest(unittest.TestCase):
             {"dag_id": "demo_04_train_and_publish", "status": "running", "start_date": "2026-10-07T09:00:00Z"},
         ]
         self.assertEqual(observer.choose_dag(runs)["dag_id"], "demo_04_train_and_publish")
+
+    def test_batch_dag_is_visible_and_can_be_selected(self):
+        self.assertIn(observer.BATCH_DAG_ID, observer.DEMO_DAGS)
+        runs = [{"dag_id": observer.BATCH_DAG_ID, "status": "running",
+                 "start_date": "2026-10-11T10:00:00Z"}]
+        self.assertEqual(observer.choose_dag(runs, observer.BATCH_DAG_ID), runs[0])
+
+    def test_batch_trigger_targets_only_batch_dag(self):
+        with patch.object(observer, "airflow_request", return_value={}) as request:
+            result = observer.trigger_batch()
+        self.assertEqual(result["dag_id"], observer.BATCH_DAG_ID)
+        self.assertEqual(request.call_args_list[0].args[:2],
+                         ("PATCH", f"/dags/{observer.BATCH_DAG_ID}"))
+        self.assertEqual(request.call_args_list[1].args[:2],
+                         ("POST", f"/dags/{observer.BATCH_DAG_ID}/dagRuns"))

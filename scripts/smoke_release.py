@@ -6,8 +6,10 @@ import requests
 
 parser = argparse.ArgumentParser()
 parser.add_argument("--revision", required=True)
+parser.add_argument("--base-url", default="http://localhost:8000")
+parser.add_argument("--expected-slot", choices=("blue", "green"))
 args = parser.parse_args()
-base = "http://localhost:8000"
+base = args.base_url.rstrip("/")
 for _ in range(60):
     try:
         response = requests.get(base + "/health", timeout=5)
@@ -21,8 +23,10 @@ version = requests.get(base + "/version", timeout=10)
 version.raise_for_status()
 assert version.json()["git_commit"] == args.revision, version.text
 assert version.json()["git_dirty"] is False, version.text
-prediction = requests.post(base + "/predict", json={"tenure_months": 6, "monthly_spend": 120, "support_tickets": 5}, timeout=120)
+prediction = requests.post(base + "/churn/predict", json={"tenure_months": 6, "monthly_spend": 120, "support_tickets": 5}, timeout=120)
 prediction.raise_for_status()
+if args.expected_slot:
+    assert prediction.headers.get("X-Serving-Slot") == args.expected_slot, prediction.headers
 result = prediction.json()
 assert 0 <= result["churn_probability"] <= 1, result
 assert result["model_uri"].startswith("models:/"), result

@@ -27,11 +27,13 @@ docker compose exec airflow cat /opt/airflow/simple_auth_manager_passwords.json.
 | PostgreSQL / Adminer | http://localhost:8081 | Таблицы клиентов, моделей и предсказаний |
 | Qdrant | http://localhost:6333/dashboard | Коллекция `customers_synthetic_v1`, 1200 клиентов и их векторы |
 | Redis Insight | http://localhost:5540 | Ключи кэша повторного поиска, TTL и команды Redis |
-| API | http://localhost:8000/docs | `POST /predict` и `POST /neighbors` прямо из браузера |
+| API | http://localhost:8000/docs | `POST /churn/predict` и `POST /neighbors` прямо из браузера |
 
 В Adminer выбрать **PostgreSQL**, сервер `postgres`, пользователь `demo`, пароль `demo_local`, база `demo`, схема `app`. Это учебные реквизиты. Порты интерфейсов привязаны к localhost; PostgreSQL доступен внутри сети Compose.
 
-В Airflow снять паузу с `demo_04_train_and_publish`, нажать Trigger и дождаться успеха. Затем открыть сервис и нажать «Получить прогноз». До первого обучения `/model` и `/predict` возвращают 503 с объяснением.
+В схеме `app` находятся данные примера оттока: `customers` — клиенты и историческая метка, `model_runs` — происхождение обученных версий, `active_model` — фактически загруженная онлайн-модель, `predictions` — отдельные HTTP-прогнозы, `churn_batch_scores` — результаты недельного пакетного скоринга. Метаданные самого MLflow находятся отдельно, в схеме `public`.
+
+В Airflow снять паузу с `demo_04_train_and_publish`, нажать Trigger и дождаться успеха. Затем открыть сервис и нажать «Получить прогноз». До первого обучения `/model` и `/churn/predict` возвращают 503 с объяснением. Прежний `/predict` оставлен для совместимости и скрыт из `/docs`.
 
 ## Как всё связано
 
@@ -80,7 +82,25 @@ docker run --rm --network ml-airflow-demo_default -e MLFLOW_TRACKING_URI=http://
 
 Сервис принимает и модели из других репозиториев, если версия Registry связана с MLflow run и содержит совместимый sklearn-классификатор: признаки `tenure_months`, `monthly_spend`, `support_tickets`, классы `0` и `1`, метод `predict_proba`. Метрики и Git commit можно записать в run; если их нет, API и интерфейс явно показывают отсутствие данных. До переключения сервис проверяет совместимость на контрольном запросе. След каждого прогноза содержит run ID и точный номер версии в PostgreSQL. На этом учебном стенде alias меняется вручную; в защищённой среде права на продвижение ограничивают и добавляют проверки кандидата перед назначением alias.
 
-Модели этого примера используют контракт `churn-v1` в тегах MLflow. Если новая модель требует другую предобработку или формат ответа, её нельзя продвигать одним изменением alias: сначала выпускают код сервиса, поддерживающий оба контракта, проверяют его со старой и новой моделью, затем переключают alias. Сервис откажет версии с неподдерживаемым тегом контракта. Для несовместимых изменений код и модель выпускают согласованной парой и переводят трафик постепенно с возможностью отката. Текущий локальный Compose запускает один экземпляр inference и при обновлении контейнера даёт короткий перерыв; безостановочная смена **кода** требует хотя бы двух реплик и балансировщика. Переключение совместимой модели через alias не требует перезапуска кода.
+Модели этого примера используют контракт `churn-v1` в тегах MLflow. Если новая модель требует другую предобработку или формат ответа, её нельзя продвигать одним изменением alias: сначала выпускают код сервиса, поддерживающий оба контракта, проверяют его со старой и новой моделью, затем переключают alias. Сервис откажет версии с неподдерживаемым тегом контракта. Для несовместимых изменений код и модель выпускают согласованной парой. CD готовит вторую копию ML-сервиса, проверяет загрузку модели и реальный прогноз, затем переключает постоянный адрес через прокси. Переключение совместимой модели через alias не требует перезапуска кода.
+
+## Недельный пакетный скоринг
+
+DAG **`demo_05_weekly_batch_scoring`** запускается по понедельникам в 03:00 UTC. Его можно запустить вручную в Airflow кнопкой **Trigger DAG** или на карте кнопкой **«Пакетный скоринг»**. Сначала нужен хотя бы один запуск `demo_04_train_and_publish` и версия `churn-prediction` с alias `production` в MLflow.
+
+Стадии DAG-а: `select_production_model → check_customers → score_and_save → verify_batch`. Первая задача фиксирует конкретную версию Registry; даже если alias изменится во время запуска, все 1200 клиентов будут оценены этой версией. Вторая проверяет наличие клиентов, третья читает их признаки из `app.customers`, загружает модель через MLflow/S3 и сохраняет оценки в **`app.churn_batch_scores`**. DAG не обучает модель, не переключает alias и не создаёт 1200 HTTP-запросов к онлайн-сервису. Повторный запуск за ту же дату атомарно заменяет снимок, а не дублирует строки. Дата берётся из времени запуска DAG в UTC; историческая метка `churn` при расчёте не используется.
+
+На карте выберите `demo_05_weekly_batch_scoring`: подсветятся связи Airflow с MLflow, S3 и PostgreSQL на соответствующих задачах. В блоке **«Последний пакетный скоринг»** появятся дата, число клиентов, число прогнозов высокого риска и версия модели. В Adminer результат можно проверить запросом:
+
+```sql
+SELECT scored_on, model_version, count(*) AS customers,
+       count(*) FILTER (WHERE prediction = 1) AS high_risk
+FROM app.churn_batch_scores
+GROUP BY scored_on, model_version
+ORDER BY scored_on DESC;
+```
+
+Здесь ради демонстрации скорятся синтетические клиенты из обучающего набора. В рабочем сценарии batch получал бы актуальный срез клиентов без известной метки оттока.
 
 ## Поиск похожих клиентов и кэш
 
@@ -133,7 +153,7 @@ docker compose exec mlflow python scripts/verify_s3.py
 
 ## GitHub и обновление кода
 
-Автоматическая сборка, проверка полного стенда и развёртывание через GitHub Actions описаны в [CI_CD.md](CI_CD.md). Платформа и ML-сервис имеют отдельные образы: push обновляет только `inference` и `traffic`, подключённые к уже работающим Airflow, MLflow и хранилищам. После перехода на CD код работает из образа; инструкция ниже с `git pull` относится к исходному режиму разработки с bind mounts.
+Автоматическая сборка, проверка полного стенда и развёртывание через GitHub Actions описаны в [CI_CD.md](CI_CD.md). Сервис выкатывается через две копии и прокси; DAG-и доставляются отдельным релизом Airflow. MLflow и хранилища при этих релизах не перезапускаются. Пошаговый показ: [GUIDE_DEMO.md](GUIDE_DEMO.md). Инструкция ниже с `git pull` относится только к локальной разработке с bind mounts.
 
 Первый запуск на другой машине: `git clone <URL-репозитория>`, перейти в папку и выполнить команды Compose выше. Для текущей папки remote добавляется при публикации репозитория.
 
@@ -144,15 +164,15 @@ git pull --ff-only
 git log -1 --oneline
 ```
 
-Конфигурация читается при каждом обучении, пересборка для неё не нужна. Airflow подхватывает обновлённые DAG-и при следующем разборе файлов. После изменения кода HTTP-сервиса выполнить `docker compose restart inference`; после изменения зависимостей — `docker compose up -d --build`.
+В режиме локальной разработки Airflow подхватывает обновлённые DAG-и из bind mount. После изменения кода HTTP-сервиса пересоберите копии командой `docker compose up -d --build inference-blue inference-green`, затем обновите адреса в прокси командой `docker compose exec inference nginx -s reload`; изменения конфигурации обучения читаются при следующем запуске DAG. Это не процедура CD.
 
-В стенде изменения доставляются явным `git pull`, а не автоматически из GitHub. Не делать pull во время активного DAG-а: код не должен меняться посреди запуска. Незакоммиченные изменения отмечаются `git_dirty=true` в MLflow, поэтому один commit в таком случае не описывает всё рабочее дерево.
+В этом локальном режиме изменения доставляются явным `git pull`; автоматический CD через GitHub Actions описан отдельно выше. Не делайте pull во время активного DAG-а: код не должен меняться посреди запуска. Незакоммиченные изменения отмечаются `git_dirty=true` в MLflow, поэтому один commit в таком случае не описывает всё рабочее дерево.
 
 ## Запрос из PowerShell
 
 ```powershell
 $body = @{ tenure_months = 6; monthly_spend = 120; support_tickets = 5 } | ConvertTo-Json
-Invoke-RestMethod http://localhost:8000/predict -Method Post -ContentType 'application/json' -Body $body
+Invoke-RestMethod http://localhost:8000/churn/predict -Method Post -ContentType 'application/json' -Body $body
 ```
 
 В ответе: вероятность, класс с порогом 0.5, MLflow run ID, Git commit, Airflow run ID и holdout ROC AUC. `GET /health` проверяет сервис и БД, `GET /model` — наличие активной модели.
@@ -169,7 +189,7 @@ ORDER BY p.id DESC LIMIT 20;
 
 ## Остановка
 
-Для проверки всех четырёх DAG-ов: `docker compose exec airflow python scripts/verify_demo.py`. Команда создаёт настоящие запуски, выполняет retry и Clear, затем проверяет инференс и строки в PostgreSQL. Проверка занимает несколько минут и оставляет историю для показа.
+Для проверки всех пяти DAG-ов: `docker compose exec airflow python scripts/verify_demo.py`. Команда создаёт настоящие запуски, выполняет retry и Clear, затем проверяет инференс и строки в PostgreSQL. Проверка занимает несколько минут и оставляет историю для показа.
 
 `docker compose stop` — остановка, `docker compose start` — повторный запуск.
 `docker compose down` удаляет контейнеры и сеть, сохраняя volumes; после него использовать `docker compose up -d`. Не добавлять `-v`, если нужна история, модели и данные.
@@ -215,8 +235,8 @@ docker compose logs -f traffic
 Можно также вручную показать два профиля быстрее, не ожидая смены фазы:
 
 ```powershell
-docker compose exec -T inference python scripts/demo_traffic.py --seconds 120 --scenario normal
-docker compose exec -T inference python scripts/demo_traffic.py --seconds 120 --scenario high-risk
+docker compose exec -T inference-blue python scripts/demo_traffic.py --seconds 120 --scenario normal
+docker compose exec -T inference-blue python scripts/demo_traffic.py --seconds 120 --scenario high-risk
 ```
 
 Первый ручной запуск создаёт обычные синтетические запросы, второй — клиентов с
@@ -234,7 +254,7 @@ volume. Grafana хранит настройки в своём volume; конфи
 Метрики запросов агрегированы по всем версиям; версия модели показана отдельно.
 Инструментация рассчитана на текущий один процесс uvicorn.
 
-Проверка: `docker compose exec -T inference python scripts/verify_monitoring.py`.
+Проверка: `docker compose exec -T airflow python scripts/verify_monitoring.py`.
 CI и CD запускают её и `scripts/verify_traffic.py` автоматически: HTTP-метрики, модель/AUC, scrape Prometheus,
 datasource Grafana и все запросы панелей. Проверка создаёт один успешный прогноз
 и один запрос с ошибкой валидации. Автоматическая рассылка оповещений пока не настроена.

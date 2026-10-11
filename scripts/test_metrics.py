@@ -17,7 +17,7 @@ class MetricsTest(unittest.TestCase):
         client = TestClient(app, raise_server_exceptions=False)
         with patch("service.app.production_version", return_value=SimpleNamespace(version="unloaded")), \
              patch("service.app.active_model", side_effect=RuntimeError("test failure")):
-            response = client.post("/predict", json={"tenure_months": 6, "monthly_spend": 120, "support_tickets": 5})
+            response = client.post("/churn/predict", json={"tenure_months": 6, "monthly_spend": 120, "support_tickets": 5})
         self.assertEqual(response.status_code, 500)
         self.assertEqual(REGISTRY.get_sample_value("demo_predict_requests_total", {"status": "500"}), before + 1)
 

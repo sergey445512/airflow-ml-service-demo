@@ -38,7 +38,7 @@ Write-Output "Rollback target: $Revision"
 Write-Output "Image: $image ($source)"
 if ($Preview) { return }
 
-& (Join-Path $PSScriptRoot 'deploy.ps1') -Image $image -Revision $Revision -DeploymentRoot $DeploymentRoot
+& (Join-Path $PSScriptRoot 'deploy_bluegreen.ps1') -Image $image -Revision $Revision -DeploymentRoot $DeploymentRoot
 if (-not $?) { throw 'Rollback deployment failed' }
 $deployed = Get-Content -LiteralPath $stateFile -Raw | ConvertFrom-Json
 if ($deployed.revision -ne $Revision) { throw 'Rollback did not record the requested revision' }
