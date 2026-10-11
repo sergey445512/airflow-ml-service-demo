@@ -19,6 +19,18 @@ for _ in range(60):
         time.sleep(2)
 else:
     raise TimeoutError("Inference did not become healthy")
+if args.expected_slot:
+    for _ in range(30):
+        try:
+            response = requests.get(base + "/health", timeout=5)
+            response.raise_for_status()
+            if response.headers.get("X-Serving-Slot") == args.expected_slot:
+                break
+        except requests.RequestException:
+            pass
+        time.sleep(1)
+    else:
+        raise TimeoutError(f"Gateway did not switch to {args.expected_slot}")
 version = requests.get(base + "/version", timeout=10)
 version.raise_for_status()
 assert version.json()["git_commit"] == args.revision, version.text

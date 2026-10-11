@@ -139,7 +139,11 @@ jobs:
           docker cp /tmp/green.conf "$gateway:/etc/nginx/conf.d/default.conf"
           docker exec "$gateway" nginx -t
           docker exec "$gateway" nginx -s reload
-          curl -fsS -D /tmp/gateway-headers http://localhost:8000/model -o /tmp/gateway-model
+          for attempt in {1..30}; do
+            curl -fsS -D /tmp/gateway-headers http://localhost:8000/model -o /tmp/gateway-model
+            if grep -qi '^X-Serving-Slot: green' /tmp/gateway-headers; then break; fi
+            sleep 1
+          done
           grep -qi '^X-Serving-Slot: green' /tmp/gateway-headers
           docker compose -p ml-ci exec -T inference-green python scripts/smoke_release.py --revision "$GITHUB_SHA" --base-url http://inference:8000 --expected-slot green
       - name: Publish tested Airflow image
