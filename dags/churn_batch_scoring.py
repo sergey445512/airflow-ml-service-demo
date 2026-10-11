@@ -10,7 +10,7 @@ from airflow.sdk import dag, get_current_context, task
 @dag(dag_id="demo_05_weekly_batch_scoring", schedule="0 3 * * 1",
      start_date=pendulum.datetime(2026, 1, 1, tz="UTC"), catchup=False,
      max_active_runs=1, tags=["ml-ui-demo", "batch-scoring"],
-     description="Weekly customer scoring with the current MLflow production model",
+     description="Weekly or manual scoring with the MLflow production model",
      doc_md="""## Weekly churn scoring
 
 Every Monday at 03:00 UTC (or on a manual trigger), read customers from PostgreSQL,
