@@ -1,0 +1,11 @@
+ARG SERVICE_BASE=ml-airflow-demo:service
+FROM ${SERVICE_BASE}
+
+USER root
+RUN pip install --no-cache-dir "jupyterlab==4.6.4" && pip check \
+    && mkdir -p /home/app/work && chown app:app /home/app/work
+USER app
+
+WORKDIR /home/app/work
+EXPOSE 8888
+CMD ["jupyter", "lab", "--ip=0.0.0.0", "--port=8888", "--no-browser", "--ServerApp.root_dir=/home/app/work"]

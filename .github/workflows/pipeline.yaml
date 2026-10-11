@@ -31,6 +31,7 @@ jobs:
       PLATFORM_IMAGE: ml-airflow-demo:ci-platform
       AIRFLOW_IMAGE: ml-airflow-demo:ci-platform
       SERVICE_IMAGE: ml-airflow-demo:ci-service
+      JUPYTER_IMAGE: ml-airflow-demo:ci-jupyterlab
       MAP_IMAGE: ml-airflow-demo:ci-map
       GATEWAY_IMAGE: ml-airflow-demo:ci-gateway
       COMPOSE_PROJECT_NAME: ml-ci
@@ -71,6 +72,8 @@ jobs:
       - name: Build service image
         run: |
           docker build -f Dockerfile.service --build-arg SOURCE_REVISION="$GITHUB_SHA" --label "org.opencontainers.image.source=https://github.com/$GITHUB_REPOSITORY" -t "$SERVICE_IMAGE" .
+      - name: Build JupyterLab image
+        run: docker compose build jupyterlab
       - name: Build architecture map
         run: docker build -f Dockerfile.map -t "$MAP_IMAGE" .
       - name: Build stable inference gateway
@@ -113,6 +116,8 @@ jobs:
         run: |
           docker compose -p ml-ci -f compose.yaml -f compose.release.yaml run --rm --no-deps --entrypoint python inference-blue scripts/train_external_model.py
           docker compose -p ml-ci exec -T inference-blue python scripts/verify_external_model.py
+      - name: Run introductory notebook
+        run: docker compose -p ml-ci exec -T jupyterlab jupyter nbconvert --execute --to notebook --output-dir=/tmp --output=executed.ipynb 01_train_churn_model.ipynb
       - name: Verify Prometheus and Grafana
         run: |
           docker compose -p ml-ci exec -T airflow python scripts/verify_monitoring.py

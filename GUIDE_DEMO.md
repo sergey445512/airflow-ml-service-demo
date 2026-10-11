@@ -1,17 +1,22 @@
 # Сценарий показа: от модели до релиза
 
-Этот сценарий рассчитан на локальный стенд с Docker Desktop и подключённым GitHub runner. Команды выполняются из `D:\ml-platform-demo` в PowerShell. Исходные данные синтетические. Адреса: [карта](http://localhost:8090), [Airflow](http://localhost:8080), [MLflow](http://localhost:5000), [ML-сервис](http://localhost:8000), [Grafana](http://localhost:3000), [Adminer](http://localhost:8081).
+Этот сценарий рассчитан на локальный стенд с Docker Desktop и подключённым GitHub runner. Команды выполняются из `D:\ml-platform-demo` в PowerShell. Исходные данные синтетические. Адреса: [JupyterLab](http://localhost:8888/lab?token=demo_lab), [карта](http://localhost:8090), [Airflow](http://localhost:8080), [MLflow](http://localhost:5000), [ML-сервис](http://localhost:8000), [Grafana](http://localhost:3000), [Adminer](http://localhost:8081).
 
-## 1. Поднять стенд и проверить исходную модель
+## Подготовить стенд
 
 ```powershell
 cd D:\ml-platform-demo
+docker compose build inference-blue
 docker compose up -d --build --wait
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File .\scripts\start-runner.ps1
 docker compose exec airflow cat /opt/airflow/simple_auth_manager_passwords.json.generated
 ```
 
-Последняя команда показывает пароль пользователя `admin` для Airflow. Откройте карту и убедитесь, что сервисы отвечают. Если этот стенд раньше уже запускался, модель и история сохранились в Docker volumes. Откройте `http://localhost:5000/#/models/churn-prediction`: у одной версии должен быть alias `production`. Точную обслуживаемую версию показывает `http://localhost:8000/model`; `http://localhost:8000/version` показывает commit кода. Если Registry пуст, запустите `demo_04_train_and_publish` в Airflow, дождитесь Success и вернитесь к этим страницам. Первое обучение назначает `production` автоматически.
+Последняя команда показывает пароль пользователя `admin` для Airflow. Откройте карту и убедитесь, что сервисы отвечают. Если стенд раньше запускался, модель и история сохранились в Docker volumes. Текущую обслуживаемую версию показывает `http://localhost:8000/model`; до назначения alias `production` этот адрес вернёт 503.
+
+## 1. Начать с ноутбука
+
+В JupyterLab откройте `01_train_churn_model.ipynb` и выполните ячейки сверху вниз. Сначала видны данные и ROC AUC, затем создаётся run в эксперименте `notebook-churn-demo` и новая версия `churn-prediction` в MLflow. Откройте модель в MLflow и файлы в S3. Ноутбук не меняет alias `production`: это кандидат, которого можно сравнить с текущей версией. Назначьте кандидату alias `production` в MLflow, откройте `/model` и сделайте прогноз через `/churn/predict`. Позже Airflow покажет, как сделать обучение повторяемым без ручного запуска ячеек.
 
 ## 2. Показать обучение и сохранение модели
 

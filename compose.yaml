@@ -22,6 +22,28 @@ x-s3-env: &s3-env
   S3_BUCKET: mlflow-artifacts
 
 services:
+  jupyterlab:
+    image: ${JUPYTER_IMAGE:-ml-airflow-demo:jupyterlab}
+    build:
+      context: .
+      dockerfile: Dockerfile.lab
+      args:
+        SERVICE_BASE: ${SERVICE_IMAGE:-ml-airflow-demo:service}
+    environment:
+      MLFLOW_TRACKING_URI: http://mlflow:5000
+      JUPYTER_TOKEN: demo_lab
+    ports: ['127.0.0.1:8888:8888']
+    volumes:
+      - ./notebooks:/home/app/work
+    depends_on:
+      mlflow:
+        condition: service_healthy
+    healthcheck:
+      test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://localhost:8888/lab?token=demo_lab', timeout=5)"]
+      interval: 10s
+      timeout: 7s
+      retries: 20
+
   architecture-map:
     image: ${MAP_IMAGE:-ml-airflow-demo:map}
     environment:

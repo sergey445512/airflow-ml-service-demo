@@ -1,4 +1,4 @@
-# ML-сервис: Git → Airflow → PostgreSQL → MLflow → онлайн-инференс
+# ML-платформа: JupyterLab → MLflow → Airflow → онлайн-инференс
 
 Учебный сервис прогноза оттока клиентов. Небольшой Random Forest обучается на синтетических данных и используется в настоящих HTTP-предсказаниях. Основная цель — увидеть полный процесс в интерфейсах.
 
@@ -11,18 +11,20 @@
 Нужны Git и Docker Desktop с Linux-контейнерами. Из каталога клонированного репозитория:
 
 ```powershell
+docker compose build inference-blue
 docker compose up -d --build
 docker compose logs --tail 30 airflow
 docker compose exec airflow cat /opt/airflow/simple_auth_manager_passwords.json.generated
 ```
 
-Последняя команда показывает пароль Airflow, логин `admin`. При первом старте пароль появляется после инициализации. Первая сборка скачивает образы и зависимости и может занять несколько минут.
+Последняя команда показывает пароль Airflow, логин `admin`. При первом старте пароль появляется после инициализации. Сначала собирается базовый образ ML-сервиса, который JupyterLab использует для тех же версий Python, scikit-learn и MLflow. Первая сборка скачивает образы и зависимости и может занять несколько минут.
 
 | Компонент | Адрес | Что показать |
 |---|---|---|
+| JupyterLab | http://localhost:8888/lab?token=demo_lab | Короткий ноутбук: обучение и регистрация кандидата |
 | Сервис | http://localhost:8000 | Форма прогноза, вероятность, версия модели и commit |
 | Airflow | http://localhost:8080 | Граф, запуск, статусы и логи |
-| MLflow | http://localhost:5000 | Эксперимент `churn-online-demo`, параметры, метрики, модель |
+| MLflow | http://localhost:5000 | Эксперименты `notebook-churn-demo` и `churn-online-demo`, параметры, метрики, версии моделей |
 | S3 / RustFS | http://localhost:9001 | Bucket `mlflow-artifacts` и настоящие файлы моделей |
 | PostgreSQL / Adminer | http://localhost:8081 | Таблицы клиентов, моделей и предсказаний |
 | Qdrant | http://localhost:6333/dashboard | Коллекция `customers_synthetic_v1`, 1200 клиентов и их векторы |
@@ -32,6 +34,8 @@ docker compose exec airflow cat /opt/airflow/simple_auth_manager_passwords.json.
 В Adminer выбрать **PostgreSQL**, сервер `postgres`, пользователь `demo`, пароль `demo_local`, база `demo`, схема `app`. Для подключения через DBeaver создать соединение **PostgreSQL**: host `127.0.0.1`, port `5433`, database `demo`, username `demo`, password `demo_local`. Это учебные реквизиты; порт PostgreSQL открыт только на localhost.
 
 В схеме `app` находятся данные примера оттока: `customers` — клиенты и историческая метка, `model_runs` — происхождение обученных версий, `active_model` — фактически загруженная онлайн-модель, `predictions` — отдельные HTTP-прогнозы, `churn_batch_scores` — результаты недельного пакетного скоринга. Метаданные самого MLflow находятся отдельно, в схеме `public`.
+
+Начать историю можно в JupyterLab: откройте `01_train_churn_model.ipynb` и выполните ячейки сверху вниз. Ноутбук создаёт синтетические данные, обучает логистическую регрессию, показывает ROC AUC и регистрирует **нового кандидата** `churn-prediction` в MLflow. Файл модели сохраняется в S3 через MLflow. Alias `production` не меняется; выбор рабочей версии остаётся отдельным шагом в интерфейсе MLflow. Исходный ноутбук лежит в `notebooks/`; изменения ячеек сохраняются в этом каталоге на компьютере. Для доступа к JupyterLab используется учебный токен `demo_lab`, порт привязан только к localhost.
 
 В Airflow снять паузу с `demo_04_train_and_publish`, нажать Trigger и дождаться успеха. Затем открыть сервис и нажать «Получить прогноз». До первого обучения `/model` и `/churn/predict` возвращают 503 с объяснением. Прежний `/predict` оставлен для совместимости и скрыт из `/docs`.
 
@@ -45,7 +49,7 @@ flowchart LR
     A --> T
     A --> Q
     T --> M[MLflow: параметры, метрики, модель]
-    E[Внешнее обучение без Airflow] --> M
+    E[JupyterLab: ручное обучение] --> M
     T --> V[MLflow Registry: версии и alias production]
     M <--> O[(S3 / RustFS: файлы моделей)]
     M --> S[Онлайн-инференс]

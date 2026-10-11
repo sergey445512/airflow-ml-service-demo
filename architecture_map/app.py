@@ -25,6 +25,7 @@ DEMO_DAGS = (
     BATCH_DAG_ID,
 )
 SERVICES = {
+    "jupyterlab": ("http://jupyterlab:8888/lab?token=demo_lab", "http://localhost:8888/lab?token=demo_lab"),
     "airflow": ("http://airflow:8080/api/v2/version", "http://localhost:8080"),
     "mlflow": ("http://mlflow:5000/health", "http://localhost:5000"),
     "inference": ("http://inference:8000/health", "http://localhost:8000"),
