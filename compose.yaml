@@ -31,6 +31,7 @@ services:
         SERVICE_BASE: ${SERVICE_IMAGE:-ml-airflow-demo:service}
     environment:
       MLFLOW_TRACKING_URI: http://mlflow:5000
+      DEMO_DATABASE_URL: postgresql://demo:demo_local@postgres:5432/demo
       JUPYTER_TOKEN: demo_lab
     ports: ['127.0.0.1:8888:8888']
     volumes:
@@ -38,6 +39,8 @@ services:
     depends_on:
       mlflow:
         condition: service_healthy
+      postgres-seed:
+        condition: service_completed_successfully
     healthcheck:
       test: [CMD, python, -c, "import urllib.request; urllib.request.urlopen('http://localhost:8888/lab?token=demo_lab', timeout=5)"]
       interval: 10s
@@ -108,8 +111,8 @@ services:
     volumes:
       - .:/opt/demo:ro
     depends_on:
-      postgres:
-        condition: service_healthy
+      postgres-seed:
+        condition: service_completed_successfully
       qdrant:
         condition: service_started
 
@@ -191,6 +194,15 @@ services:
       interval: 5s
       timeout: 5s
       retries: 20
+
+  postgres-seed:
+    image: ${PLATFORM_IMAGE:-ml-airflow-demo:platform}
+    entrypoint: []
+    command: [python, -c, "from src.pipeline import seed_data; print(seed_data())"]
+    environment: *env
+    depends_on:
+      postgres:
+        condition: service_healthy
 
   mlflow:
     <<: *app

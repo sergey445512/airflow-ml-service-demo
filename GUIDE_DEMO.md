@@ -16,7 +16,7 @@ docker compose exec airflow cat /opt/airflow/simple_auth_manager_passwords.json.
 
 ## 1. Начать с ноутбука
 
-В JupyterLab откройте `01_train_churn_model.ipynb` и выполните ячейки сверху вниз. Сначала видны данные и ROC AUC, затем создаётся run в эксперименте `notebook-churn-demo` и новая версия `churn-prediction` в MLflow. Откройте модель в MLflow и файлы в S3. Ноутбук не меняет alias `production`: это кандидат, которого можно сравнить с текущей версией. Назначьте кандидату alias `production` в MLflow, откройте `/model` и сделайте прогноз через `/churn/predict`. Позже Airflow покажет, как сделать обучение повторяемым без ручного запуска ячеек.
+В DBeaver откройте `app.customers`, затем в JupyterLab — `01_train_churn_model.ipynb`. Выполните ячейки сверху вниз: SQL-запрос читает клиентов из PostgreSQL, следующие ячейки обучают модель и показывают ROC AUC. Затем создаётся run в эксперименте `notebook-churn-demo` и новая версия `churn-prediction` в MLflow. Откройте модель в MLflow и файлы в S3. Ноутбук не меняет alias `production`: это кандидат, которого можно сравнить с текущей версией. Назначьте кандидату alias `production` в MLflow, откройте `/model` и сделайте прогноз через `/churn/predict`. Позже Airflow покажет, как сделать обучение повторяемым без ручного запуска ячеек.
 
 ## 2. Показать обучение и сохранение модели
 
