@@ -29,7 +29,7 @@ docker compose exec airflow cat /opt/airflow/simple_auth_manager_passwords.json.
 | Redis Insight | http://localhost:5540 | Ключи кэша повторного поиска, TTL и команды Redis |
 | API | http://localhost:8000/docs | `POST /churn/predict` и `POST /neighbors` прямо из браузера |
 
-В Adminer выбрать **PostgreSQL**, сервер `postgres`, пользователь `demo`, пароль `demo_local`, база `demo`, схема `app`. Это учебные реквизиты. Порты интерфейсов привязаны к localhost; PostgreSQL доступен внутри сети Compose.
+В Adminer выбрать **PostgreSQL**, сервер `postgres`, пользователь `demo`, пароль `demo_local`, база `demo`, схема `app`. Для подключения через DBeaver создать соединение **PostgreSQL**: host `127.0.0.1`, port `5433`, database `demo`, username `demo`, password `demo_local`. Это учебные реквизиты; порт PostgreSQL открыт только на localhost.
 
 В схеме `app` находятся данные примера оттока: `customers` — клиенты и историческая метка, `model_runs` — происхождение обученных версий, `active_model` — фактически загруженная онлайн-модель, `predictions` — отдельные HTTP-прогнозы, `churn_batch_scores` — результаты недельного пакетного скоринга. Метаданные самого MLflow находятся отдельно, в схеме `public`.
 
