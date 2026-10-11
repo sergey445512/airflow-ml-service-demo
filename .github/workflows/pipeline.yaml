@@ -29,6 +29,7 @@ jobs:
       service_changed: ${{ steps.changes.outputs.service_changed }}
     env:
       PLATFORM_IMAGE: ml-airflow-demo:ci-platform
+      AIRFLOW_IMAGE: ml-airflow-demo:ci-platform
       SERVICE_IMAGE: ml-airflow-demo:ci-service
       MAP_IMAGE: ml-airflow-demo:ci-map
       GATEWAY_IMAGE: ml-airflow-demo:ci-gateway
