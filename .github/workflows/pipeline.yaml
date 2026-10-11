@@ -51,10 +51,10 @@ jobs:
             files=$(git diff --name-only "$BEFORE" "$GITHUB_SHA")
             dag_changed=false
             service_changed=false
-            if grep -Eq '^(dags/|src/|scripts/verify_demo.py|Dockerfile$|model_config.json$|compose.yaml$|compose.release.yaml$)' <<< "$files"; then
+            if grep -Eq '^(.github/workflows/pipeline.yaml$|dags/|src/|scripts/verify_demo.py|Dockerfile$|model_config.json$|compose.yaml$|compose.release.yaml$)' <<< "$files"; then
               dag_changed=true
             fi
-            if grep -Eq '^(service/|src/|scripts/|Dockerfile.service$|compose.yaml$|compose.release.yaml$)' <<< "$files"; then
+            if grep -Eq '^(.github/workflows/pipeline.yaml$|service/|src/|scripts/|Dockerfile.service$|compose.yaml$|compose.release.yaml$)' <<< "$files"; then
               service_changed=true
             fi
           fi
