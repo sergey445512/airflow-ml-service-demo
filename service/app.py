@@ -149,6 +149,7 @@ def version():
 @app.post("/predict", include_in_schema=False)
 @app.post("/churn/predict")
 def predict(customer: Customer):
+    """Predict churn probability for a single customer; record the prediction in Postgres."""
     info, model = serving_model()
     features = customer.model_dump()
     probability = float(model.predict_proba(pd.DataFrame([features], columns=FEATURES))[0, 1])
