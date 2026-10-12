@@ -62,7 +62,7 @@ def startup():
     initialize()
 
 def active_model(version):
-    """Read lineage from MLflow; training can happen in any process or repository."""
+    """Read lineage from MLflow; training can happen in any process or repository"""
     if not version.run_id:
         raise HTTPException(503, "Версия в MLflow не связана с запуском обучения")
     try:
