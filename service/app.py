@@ -167,7 +167,7 @@ def predict(customer: Customer):
 
 @app.post("/neighbors")
 def neighbors(customer: SimilarCustomer):
-    """Show similar historical customers; repeated requests are cached in Redis."""
+    """Show similar historical customers; repeated requests are cached in Redis"""
     features = {feature: getattr(customer, feature) for feature in FEATURES}
     key = cache_key(features, customer.limit)
     client = None
