@@ -1,43 +1,175 @@
-# ML-платформа: PostgreSQL → JupyterLab → MLflow → онлайн-инференс
+# Учебная ML-платформа: от ноутбука до прогноза
 
-Учебный сервис прогноза оттока клиентов. Небольшой Random Forest обучается на синтетических данных и используется в настоящих HTTP-предсказаниях. Основная цель — увидеть полный процесс в интерфейсах.
+Локальный стенд: PostgreSQL → JupyterLab / Airflow → MLflow → S3 → HTTP-сервис. Данные синтетические; модели и файлы с компьютера автора не нужны.
 
-## Живая карта архитектуры
+**Начните с шагов 1–7.** Для них не нужны Python на компьютере, GitHub Actions, runner или доступ к GHCR. CI/CD — отдельное продолжение в [CI_CD.md](CI_CD.md). Подробности компонентов находятся после инструкции, сценарий показа — в [GUIDE_DEMO.md](GUIDE_DEMO.md).
 
-Откройте **http://localhost:8090**: отдельный сервис показывает статус компонентов, стадии DAG, активную модель, поток запросов и ход CI/CD. Сценарий для гайда: [ARCHITECTURE_MAP.md](ARCHITECTURE_MAP.md).
+## 1. Подготовить компьютер
 
-## Запуск
+Установите Git и Docker Desktop с Linux-контейнерами; на Linux можно использовать Docker Engine с современным Docker Compose (команда `docker compose`). Запустите Docker. Нужен интернет для скачивания репозитория, образов и пакетов. Проверьте свободное место на диске Docker: образы и volumes занимают место вне папки репозитория. Минимальный объём RAM/диска не измерен, ARM/macOS отдельно не проверялись.
 
-Нужны Git и Docker Desktop с Linux-контейнерами. Из каталога клонированного репозитория:
+```text
+git --version
+docker version
+docker compose version
+```
 
-```powershell
+**Проверка:** Docker показывает Client и Server, команда `docker compose version` выполняется успешно (эта инструкция проверена с Compose 5.5.1). Если daemon недоступен, сначала запустите Docker.
+
+## 2. Скачать и зафиксировать версию
+
+Из любой удобной родительской папки:
+
+```text
+git clone https://github.com/sergey445512/airflow-ml-service-demo.git ml-platform-demo
+cd ml-platform-demo
+git rev-parse HEAD
+git status --short
+```
+
+Если репозиторий приватный, владелец должен выдать доступ. Сохраните SHA из `git rev-parse HEAD`. Для повторения конкретной версии гайда до сборки выполните `git checkout <SHA-из-гайда>`, подставив настоящий SHA.
+
+**Проверка:** здесь есть `compose.yaml`, `Dockerfile`, `notebooks/`, `dags/`, а сразу после клонирования `git status --short` пуст. Все дальнейшие команды выполняются из этой папки. Фиксированный путь на диске и `.env` не нужны. Зависимости перечислены в `Dockerfile*`.
+
+## 3. Собрать образы
+
+Выполняйте по очереди; при ошибке не переходите дальше:
+
+```text
+docker compose config --quiet
 docker compose build inference-blue
-docker compose up -d --build
-docker compose logs --tail 30 airflow
+docker compose build airflow
+docker compose build jupyterlab architecture-map inference
+```
+
+ML-образ собирается первым: JupyterLab использует его как базу с совместимыми библиотеками. Образ Airflow используется также MLflow и задачами инициализации. Вторая копия ML-сервиса использует тот же локальный образ.
+
+**Проверка:** все команды завершились с кодом 0. Не заменяйте закреплённые версии на `latest` при ошибках скачивания: сначала проверьте доступ к registry и интернет.
+
+Используйте оболочку без ранее заданных `PLATFORM_IMAGE`, `AIRFLOW_IMAGE`, `SERVICE_IMAGE`, `BLUE_IMAGE`, `GREEN_IMAGE`, `JUPYTER_IMAGE`, `MAP_IMAGE`, `GATEWAY_IMAGE`: они переопределяют локальные образы. Итоговый набор показывает `docker compose config --images`.
+
+## 4. Запустить и проверить готовность
+
+```text
+docker compose up -d --no-build --wait --wait-timeout 600
+docker compose ps -a
+docker compose logs --tail 40 airflow
+```
+
+При первом запуске автоматически создаются 1200 клиентов в PostgreSQL, bucket S3 и коллекция Qdrant. Инициализация может занять несколько минут.
+
+**Проверка:** долгоживущие сервисы работают; имеющие healthcheck переходят в `healthy`. Задачи `postgres-seed`, `s3-init`, `qdrant-init`, `redisinsight-init` должны завершиться с `Exited (0)` — это нормально. У Airflow нет Compose healthcheck: отдельно дождитесь страницы http://localhost:8080 и появления DAG-ов.
+
+Откройте карту и ML-сервис. До обучения и выбора production-модели ответы 503 на `/model` и `/churn/predict` ожидаемы. Успех `/health` означает готовность сервиса и БД, но не наличие модели.
+
+| Инструмент | Адрес | Вход |
+|---|---|---|
+| ML-сервис / API | http://localhost:8000 / http://localhost:8000/docs | Без входа |
+| Карта | http://localhost:8090 | Без входа |
+| JupyterLab | http://localhost:8888/lab?token=demo_lab | Токен `demo_lab` |
+| MLflow | http://localhost:5000 | Без входа |
+| Airflow | http://localhost:8080 | `admin`, пароль командой ниже |
+| S3 / RustFS | http://localhost:9001 | `demo_s3` / `demo_s3_password` |
+| Adminer | http://localhost:8081 | PostgreSQL, сервер `postgres`, база `demo`, `demo` / `demo_local` |
+| Grafana | http://localhost:3000 | `admin` / `demo_grafana` |
+| Prometheus | http://localhost:9090 | Без входа |
+| Qdrant | http://localhost:6333/dashboard | Без входа |
+| Redis Insight | http://localhost:5540 | Redis подключается автоматически |
+
+```text
 docker compose exec airflow cat /opt/airflow/simple_auth_manager_passwords.json.generated
 ```
 
-Последняя команда показывает пароль Airflow, логин `admin`. При первом старте пароль появляется после инициализации. Сначала собирается базовый образ ML-сервиса, который JupyterLab использует для тех же версий Python, scikit-learn и MLflow. Первая сборка скачивает образы и зависимости и может занять несколько минут.
+Пароль Airflow появляется после инициализации. Для DBeaver: host `127.0.0.1`, port `5433`, database `demo`, user `demo`, password `demo_local`, schema `app`. В браузере используйте `localhost`; имена `mlflow`, `postgres`, `s3` работают внутри Docker. Эти учётные данные и привязка портов к localhost предназначены для локального занятия.
 
-| Компонент | Адрес | Что показать |
-|---|---|---|
-| JupyterLab | http://localhost:8888/lab?token=demo_lab | Короткий ноутбук: обучение и регистрация кандидата |
-| Сервис | http://localhost:8000 | Форма прогноза, вероятность, версия модели и commit |
-| Airflow | http://localhost:8080 | Граф, запуск, статусы и логи |
-| MLflow | http://localhost:5000 | Эксперименты `notebook-churn-demo` и `churn-online-demo`, параметры, метрики, версии моделей |
-| S3 / RustFS | http://localhost:9001 | Bucket `mlflow-artifacts` и настоящие файлы моделей |
-| PostgreSQL / Adminer | http://localhost:8081 | Таблицы клиентов, моделей и предсказаний |
-| Qdrant | http://localhost:6333/dashboard | Коллекция `customers_synthetic_v1`, 1200 клиентов и их векторы |
-| Redis Insight | http://localhost:5540 | Ключи кэша повторного поиска, TTL и команды Redis |
-| API | http://localhost:8000/docs | `POST /churn/predict` и `POST /neighbors` прямо из браузера |
+## 5. Обучить и выбрать первую модель
 
-В Adminer выбрать **PostgreSQL**, сервер `postgres`, пользователь `demo`, пароль `demo_local`, база `demo`, схема `app`. Для подключения через DBeaver создать соединение **PostgreSQL**: host `127.0.0.1`, port `5433`, database `demo`, username `demo`, password `demo_local`. Это учебные реквизиты; порт PostgreSQL открыт только на localhost.
+1. В JupyterLab откройте `01_train_churn_model.ipynb` и выполните ячейки сверху вниз. Сохранённый вывод — пример прошлого запуска, он не создаёт модель на вашем компьютере.
+2. Ноутбук читает PostgreSQL, обучает логистическую регрессию и регистрирует кандидата в MLflow. Дождитесь выполнения всех ячеек без ошибок.
+3. В MLflow откройте **Models → churn-prediction** в Registry (не Logged Models внутри эксперимента). Откройте новую версию и назначьте alias **`production`**. Ноутбук сам его не меняет.
+4. Откройте http://localhost:8000/model: сервис загрузит выбранную модель через MLflow из S3.
 
-В схеме `app` находятся данные примера оттока: `customers` — клиенты и историческая метка, `model_runs` — происхождение обученных версий, `active_model` — фактически загруженная онлайн-модель, `predictions` — отдельные HTTP-прогнозы, `churn_batch_scores` — результаты недельного пакетного скоринга. Метаданные самого MLflow находятся отдельно, в схеме `public`.
+**Проверка:** `/model` показывает выбранную версию. Номера версий и run ID у каждого свои, не сравнивайте их со скриншотами. Изменения ноутбука сохраняются в `notebooks/` и видны в `git status`.
 
-Начать историю можно в JupyterLab: откройте `01_train_churn_model.ipynb` и выполните ячейки сверху вниз. Учебные клиенты автоматически подготовлены в таблице `app.customers` при запуске стенда. Ноутбук показывает SQL-запрос к PostgreSQL, обучает на прочитанных строках логистическую регрессию, выводит ROC AUC и регистрирует **нового кандидата** `churn-prediction` в MLflow. Тот же запрос можно выполнить в DBeaver. Файл модели сохраняется в S3 через MLflow. Alias `production` не меняется; выбор рабочей версии остаётся отдельным шагом в интерфейсе MLflow. Исходный ноутбук лежит в `notebooks/`; изменения ячеек сохраняются в этом каталоге на компьютере. Для доступа к JupyterLab используется учебный токен `demo_lab`, порт привязан только к localhost.
+Альтернатива без ноутбука: в Airflow снимите паузу с `demo_04_train_and_publish` (переключатель DAG в состояние Enabled/Unpaused), нажмите Trigger и дождитесь Success. Новые DAG-и изначально на паузе: ручной запуск без включения может остаться в очереди. DAG обучает Random Forest и при отсутствии alias назначает первую production-модель. Для первого прогноза достаточно одного из двух путей.
 
-В Airflow снять паузу с `demo_04_train_and_publish`, нажать Trigger и дождаться успеха. Затем открыть сервис и нажать «Получить прогноз». До первого обучения `/model` и `/churn/predict` возвращают 503 с объяснением. Прежний `/predict` оставлен для совместимости и скрыт из `/docs`.
+## 6. Получить прогноз
+
+На http://localhost:8000 нажмите «Получить прогноз» либо выполните в PowerShell:
+
+```powershell
+$body = @{ tenure_months = 6; monthly_spend = 120; support_tickets = 5 } | ConvertTo-Json
+Invoke-RestMethod http://localhost:8000/churn/predict -Method Post -ContentType 'application/json' -Body $body
+```
+
+**Проверка:** есть `churn_probability` от 0 до 1, `prediction`, `model_version`, `mlflow_run_id`. Версия совпадает с alias `production`. В Adminer/DBeaver выполните:
+
+```sql
+SELECT count(*) FROM app.customers; -- 1200
+SELECT * FROM app.active_model;
+SELECT id, probability, model_version, created_at
+FROM app.predictions ORDER BY id DESC LIMIT 5;
+```
+
+Откройте Grafana, выберите последние 15 минут. Генератор `traffic` автоматически отправляет запросы; графики заполняются постепенно после появления рабочей модели.
+
+## 7. Остановить и продолжить позже
+
+```text
+docker compose stop
+```
+
+Для повторного запуска запустите Docker и из той же папки выполните:
+
+```text
+docker compose up -d --no-build --wait --wait-timeout 600
+docker compose exec inference nginx -s reload
+```
+
+Повторите проверку модели и прогноза. Перезагрузка nginx обновляет адреса контейнеров после перезапуска. История и модели сохраняются в volumes. `docker compose down` удаляет контейнеры и сеть, сохраняя volumes. **Не добавляйте `-v`**, если нужны данные. Сброс Docker и `docker system prune` не являются шагами запуска.
+
+Это команды для локального клона. Если стенд уже переведён на управляемые релизы CI/CD, не запускайте поверх него Compose из рабочей папки: см. [CI_CD.md](CI_CD.md).
+
+## Если шаг не прошёл
+
+| Симптом | Проверка |
+|---|---|
+| Docker daemon недоступен | Запуск Docker, Linux containers, `docker version` |
+| Порт занят | Проверьте, какой проект его использует; не останавливайте чужие контейнеры автоматически. Порты перечислены в `compose.yaml` |
+| Ошибка инициализации | `docker compose logs --tail 100 postgres-seed s3-init qdrant-init redisinsight-init` |
+| Airflow не открывается | `docker compose logs --tail 100 airflow`, дождаться инициализации |
+| 503 при прогнозе | Проверить обучение и alias `production`; логи `inference-blue`, `inference-green`, `mlflow` |
+| 502 от прокси | Проверить готовность копий в `docker compose ps`, затем `docker compose exec inference nginx -s reload` |
+| Ноутбук не сохраняется на Linux | У контейнера Jupyter UID 10001; проверьте право записи в `notebooks/` для этого пользователя, не применяйте `chmod 777` ко всему проекту |
+| CD в очереди | Для локального занятия CD не нужен; Windows runner настраивается отдельно |
+
+Compose использует фиксированное имя `ml-airflow-demo`. Второй клон на том же Docker не является изолированным стендом: совпадут имя проекта, порты и volumes. Не запускайте его поверх работающего проекта.
+
+## Запрос для ИИ-агента
+
+> Прочитай README.md и выполни шаги 1–6 для локального стенда. Сначала проверь git SHA, Docker, свободное место, занятые порты и существующий проект ml-airflow-demo. После каждой команды проверяй код завершения и ожидаемый результат. Используй закреплённые зависимости. Не настраивай CI/CD, не запускай runner, не обновляй пакеты и не удаляй volumes. Если модель уже существует, не меняй production без моего указания. В пустом стенде обучи модель по инструкции и назначь production. При ошибке изучи логи конкретного сервиса. В конце сообщи SHA, версии Docker/Compose, выполненные команды, результат реального прогноза, версию модели, адреса интерфейсов и отклонения от инструкции.
+
+Для воспроизводимости сохраняйте SHA, версии Docker/Compose и результаты проверки. Основные зависимости закреплены, но не все транзитивные зависимости и базовые образы фиксированы digest: побитово одинаковая сборка не гарантируется. Результат проверки отдельного чистого развёртывания приведён ниже.
+
+## Проверенное развёртывание — 13 октября 2026
+
+Проверен клон GitHub на коммите `e067a125868f65e040bb4ac05fe76d8c2e1673e3` с обновлённой инструкцией. Среда: Windows, Docker Desktop с Linux-контейнерами, Docker 29.8.2, Compose 5.5.1. Все пять образов проекта собраны с `--no-cache`; использованы отдельные новые volumes, сеть, имя проекта и теги образов. Для соседства с работающим стендом внешние порты увеличены на 10000, список разрешённых хостов MLflow дополнен тестовым портом. В обычном запуске эти изменения не нужны.
+
+Успешно проверены:
+
+- создание 1200 клиентов и первоначальный ответ 503 до выбора модели;
+- выполнение всех ячеек ноутбука через Jupyter, регистрация v1, назначение alias через MLflow API и HTTP-прогноз;
+- настоящий `model.pkl` в S3, запись прогноза в PostgreSQL;
+- Qdrant и последовательность Redis cache miss → hit;
+- обучение и недельный batch DAG (Success), 1200 batch-оценок за дату;
+- состояния сервисов и задач на карте, сбор метрик и запросы панелей Grafana;
+- остановка и повторный запуск с сохранением production-модели и успешным прогнозом.
+
+Это проверка нового развёртывания на том же Docker, а не на отдельном компьютере: базовые и инфраструктурные образы могли использовать локальный кэш. Клики в интерфейсах заменялись эквивалентными API/CLI-действиями; CI/CD, ARM, Linux/macOS как хост и скачивание без доступа к приватному репозиторию не проверялись. Код приложения для этого запуска менять не потребовалось. В ходе проверки уточнены версия Compose и необходимость снимать DAG с паузы.
+
+## После первого прогноза
+
+Запустите обучение в Airflow, сравните кандидатов в MLflow, вручную запустите недельный batch DAG, дважды найдите похожих клиентов для демонстрации Qdrant/Redis. Наблюдайте этапы на карте и метрики в Grafana. Подробности — ниже; Git → CI → CD изучается отдельно по [CI_CD.md](CI_CD.md).
 
 ## Как всё связано
 
@@ -79,8 +211,7 @@ flowchart LR
 Любой отдельный тренер может записать запуск и модель в тот же MLflow Tracking Server, затем зарегистрировать её как новую версию `churn-prediction`. Airflow в этом маршруте не участвует. Для самостоятельного примера из PowerShell:
 
 ```powershell
-$release = Get-Content D:\projects\_deploy\ml-airflow-demo\current.json -Raw | ConvertFrom-Json
-docker run --rm --network ml-airflow-demo_default -e MLFLOW_TRACKING_URI=http://mlflow:5000 --entrypoint python $release.image scripts/train_external_model.py
+docker compose exec -T inference-blue python scripts/train_external_model.py
 ```
 
 Скрипт отдельно обучает логистическую регрессию на синтетических данных, записывает run в эксперимент `external-churn-demo`, проверяет ROC AUC и регистрирует кандидата. Он **не меняет** alias `production`. Откройте MLflow → **Models → churn-prediction**, сравните версии и назначьте новому кандидату alias `production`. После нажатия «Обновить версию» сервис загрузит её, а `/model` покажет `training_source: external-script` и `airflow_run_id: null`. Для отката верните alias предыдущей версии.
@@ -91,7 +222,7 @@ docker run --rm --network ml-airflow-demo_default -e MLFLOW_TRACKING_URI=http://
 
 ## Недельный пакетный скоринг
 
-DAG **`demo_05_weekly_batch_scoring`** запускается по понедельникам в 03:00 UTC. Его можно запустить вручную в Airflow кнопкой **Trigger DAG** или на карте кнопкой **«Пакетный скоринг»**. Сначала нужен хотя бы один запуск `demo_04_train_and_publish` и версия `churn-prediction` с alias `production` в MLflow.
+DAG **`demo_05_weekly_batch_scoring`** запускается по понедельникам в 03:00 UTC. Перед первым запуском снимите с него паузу в Airflow. Затем его можно запустить вручную кнопкой **Trigger DAG** или на карте кнопкой **«Пакетный скоринг»**. При включении расписания может появиться один актуальный плановый запуск; ручной дождётся его завершения, поскольку одновременно разрешён один запуск этого DAG. Сначала нужны клиенты в PostgreSQL и версия `churn-prediction` с alias `production`; модель может быть обучена через ноутбук, внешний скрипт или Airflow.
 
 Стадии DAG-а: `select_production_model → check_customers → score_and_save → verify_batch`. Первая задача фиксирует конкретную версию Registry; даже если alias изменится во время запуска, все 1200 клиентов будут оценены этой версией. Вторая проверяет наличие клиентов, третья читает их признаки из `app.customers`, загружает модель через MLflow/S3 и сохраняет оценки в **`app.churn_batch_scores`**. DAG не обучает модель, не переключает alias и не создаёт 1200 HTTP-запросов к онлайн-сервису. Повторный запуск за ту же дату атомарно заменяет снимок, а не дублирует строки. Дата берётся из времени запуска DAG в UTC; историческая метка `churn` при расчёте не используется.
 
@@ -132,7 +263,7 @@ MLflow хранит метаданные в PostgreSQL в схеме `public`, �
 
 ## Файлы моделей в S3
 
-Открыть http://localhost:9001. Access key / логин: `demo_s3`, Secret key / пароль: `demo_s3_password`. Выбрать bucket **mlflow-artifacts**, затем `1 → models → <model-id> → artifacts`. Здесь лежат `model.pkl`, `MLmodel`, описание зависимостей и пример входных данных. Порт 9000 — S3 API, порт 9001 — веб-консоль.
+Открыть http://localhost:9001. Access key / логин: `demo_s3`, Secret key / пароль: `demo_s3_password`. Выбрать bucket **mlflow-artifacts**, затем `<experiment-id> → models → <model-id> → artifacts` (ID берутся из вашего запуска). Здесь лежат `model.pkl`, `MLmodel`, описание зависимостей и пример входных данных. Порт 9000 — S3 API, порт 9001 — веб-консоль.
 
 Маршрут записи: **задача Airflow → MLflow → S3**. Маршрут загрузки: **сервис → MLflow → S3**. Доступ к S3 настроен у MLflow; задачам обучения и сервису отдельные ключи не нужны. Поэтому MLflow продолжает показывать URI вида `mlflow-artifacts:/...`, хотя физически файлы лежат в `s3://mlflow-artifacts/...`.
 
@@ -196,10 +327,10 @@ ORDER BY p.id DESC LIMIT 20;
 
 Для проверки всех пяти DAG-ов: `docker compose exec airflow python scripts/verify_demo.py`. Команда создаёт настоящие запуски, выполняет retry и Clear, затем проверяет инференс и строки в PostgreSQL. Проверка занимает несколько минут и оставляет историю для показа.
 
-`docker compose stop` — остановка, `docker compose start` — повторный запуск.
+Остановка и повторный запуск описаны в шаге 7 выше.
 `docker compose down` удаляет контейнеры и сеть, сохраняя volumes; после него использовать `docker compose up -d`. Не добавлять `-v`, если нужна история, модели и данные.
 
-Это учебная автоматическая публикация каждой успешно обученной модели без отбора по качеству. Сравнение экспериментов показывается вручную. Три признака, небольшие данные и один процесс сервиса выбраны ради наглядности.
+Обучение регистрирует кандидата; продвижение через production выполняется вручную, кроме начального назначения обучающим DAG при отсутствии alias. Сравнение экспериментов показывается вручную. Три признака, небольшие данные и один процесс сервиса выбраны ради наглядности.
 
 ## Источники
 
